@@ -13,7 +13,9 @@ from fastapi.staticfiles import StaticFiles
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.environ["BOT_TOKEN"]
-PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:8000").rstrip("/")
+PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:8000").strip().rstrip("/")
+if not PUBLIC_APP_URL.startswith(("http://", "https://")):
+    PUBLIC_APP_URL = "https://" + PUBLIC_APP_URL
 BASE = Path(__file__).resolve().parent.parent
 WEBHOOK_PATH = "/telegram/webhook"
 
