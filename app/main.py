@@ -3,7 +3,8 @@ import logging
 import os
 from pathlib import Path
 
-from aiogram import Bot, Dispatcher, F`r`nfrom aiogram.exceptions import TelegramAPIError
+from aiogram import Bot, Dispatcher, F
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonWebApp, WebAppInfo, Message
 from fastapi import FastAPI
@@ -42,7 +43,11 @@ async def start(message: Message):
 async def bot_loop():
     bot = Bot(TOKEN)
     await bot.set_my_commands([BotCommand(command="start", description="РћС‚РєСЂС‹С‚СЊ РїСЂРёР»РѕР¶РµРЅРёРµ")])
-    for admin_id in ADMIN_IDS:`r`n        try:`r`n            await bot.set_chat_menu_button(chat_id=admin_id, menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=PUBLIC_APP_URL)))`r`n        except TelegramAPIError:`r`n            logging.warning("Could not set menu button for admin %s; check ADMIN_IDS", admin_id))
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.set_chat_menu_button(chat_id=admin_id, menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=PUBLIC_APP_URL)))
+        except TelegramAPIError:
+            logging.warning("Could not set menu button for admin %s; check ADMIN_IDS", admin_id)
     await dp.start_polling(bot)
 
 async def serve():
