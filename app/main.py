@@ -1,24 +1,23 @@
-﻿import asyncio
+import asyncio
 import logging
 import os
 from pathlib import Path
 
 import uvicorn
 from aiogram import Bot, Dispatcher
-from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonWebApp, WebAppInfo, Message
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.environ["BOT_TOKEN"]
-PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:8000")
-ADMIN_IDS = {int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()}
+PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:8000").rstrip("/")
 BASE = Path(__file__).resolve().parent.parent
+WEBHOOK_PATH = "/telegram/webhook"
 
-api = FastAPI(title="Partners & Agents Mini App")
+api = FastAPI(title="Melbet Partners Mini App")
 api.mount("/static", StaticFiles(directory=BASE / "web"), name="static")
 dp = Dispatcher()
 
@@ -27,37 +26,35 @@ async def index():
     return FileResponse(BASE / "web" / "index.html")
 
 def open_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
-        text="РћС‚РєСЂС‹С‚СЊ", web_app=WebAppInfo(url=PUBLIC_APP_URL)
-    )]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Открыть", web_app=WebAppInfo(url=PUBLIC_APP_URL))]])
 
 @dp.message(CommandStart())
 async def start(message: Message):
     await message.answer(
-        "вљЎ РќР°С‡РЅРёС‚Рµ СЂР°Р±РѕС‚Сѓ\n\n"
-        "Р§С‚РѕР±С‹ РїСЂРѕРґРѕР»Р¶РёС‚СЊ, РЅР°Р¶РјРёС‚Рµ РєРЅРѕРїРєСѓ В«РћС‚РєСЂС‹С‚СЊВ» РЅРёР¶Рµ рџ‘‡\n\n"
-        "Р’ РїСЂРёР»РѕР¶РµРЅРёРё РґРѕСЃС‚СѓРїРЅС‹ СЂРµРіРёСЃС‚СЂР°С†РёСЏ, РјР°С‚РµСЂРёР°Р»С‹, СЃС‚Р°С‚РёСЃС‚РёРєР° Рё РїРѕРґРґРµСЂР¶РєР°.",
+        "⚡ Начните работу\n\nЧтобы продолжить, нажмите кнопку «Открыть» ниже 👇\n\n"
+        "В приложении доступны регистрация, материалы, статистика и поддержка.",
         reply_markup=open_keyboard(),
     )
 
-async def bot_loop():
+@api.post(WEBHOOK_PATH)
+async def telegram_webhook(request: Request):
     bot = Bot(TOKEN)
-    await bot.set_my_commands([BotCommand(command="start", description="РћС‚РєСЂС‹С‚СЊ РїСЂРёР»РѕР¶РµРЅРёРµ")])
-    for admin_id in ADMIN_IDS:
-        try:
-            await bot.set_chat_menu_button(
-                chat_id=admin_id,
-                menu_button=MenuButtonWebApp(text="РћС‚РєСЂС‹С‚СЊ", web_app=WebAppInfo(url=PUBLIC_APP_URL)),
-            )
-        except TelegramAPIError:
-            logging.warning("РќРµ СѓРґР°Р»РѕСЃСЊ СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РјРµРЅСЋ РґР»СЏ ADMIN_IDS=%s", admin_id)
-    await dp.start_polling(bot)
+    try:
+        await dp.feed_raw_update(bot, await request.json())
+    finally:
+        await bot.session.close()
+    return {"ok": True}
+
+async def bot_setup():
+    bot = Bot(TOKEN)
+    await bot.set_my_commands([BotCommand(command="start", description="Открыть приложение")])
+    await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=PUBLIC_APP_URL)))
+    await bot.set_webhook(f"{PUBLIC_APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
+    await asyncio.Event().wait()
 
 async def serve():
-    config = uvicorn.Config(api, host="0.0.0.0", port=int(os.getenv("PORT", "8000")), log_level="info")
-    server = uvicorn.Server(config)
-    await asyncio.gather(server.serve(), bot_loop())
+    server = uvicorn.Server(uvicorn.Config(api, host="0.0.0.0", port=int(os.getenv("PORT", "8000")), log_level="info"))
+    await asyncio.gather(server.serve(), bot_setup())
 
 if __name__ == "__main__":
     asyncio.run(serve())
-
