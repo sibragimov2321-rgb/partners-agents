@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import logging
 import os
 from pathlib import Path
@@ -28,29 +28,29 @@ async def index():
 
 def open_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
-        text="Открыть", web_app=WebAppInfo(url=PUBLIC_APP_URL)
+        text="РћС‚РєСЂС‹С‚СЊ", web_app=WebAppInfo(url=PUBLIC_APP_URL)
     )]])
 
 @dp.message(CommandStart())
 async def start(message: Message):
     await message.answer(
-        "⚡ Начните работу\n\n"
-        "Чтобы продолжить, нажмите кнопку «Открыть» ниже 👇\n\n"
-        "В приложении доступны регистрация, материалы, статистика и поддержка.",
+        "вљЎ РќР°С‡РЅРёС‚Рµ СЂР°Р±РѕС‚Сѓ\n\n"
+        "Р§С‚РѕР±С‹ РїСЂРѕРґРѕР»Р¶РёС‚СЊ, РЅР°Р¶РјРёС‚Рµ РєРЅРѕРїРєСѓ В«РћС‚РєСЂС‹С‚СЊВ» РЅРёР¶Рµ рџ‘‡\n\n"
+        "Р’ РїСЂРёР»РѕР¶РµРЅРёРё РґРѕСЃС‚СѓРїРЅС‹ СЂРµРіРёСЃС‚СЂР°С†РёСЏ, РјР°С‚РµСЂРёР°Р»С‹, СЃС‚Р°С‚РёСЃС‚РёРєР° Рё РїРѕРґРґРµСЂР¶РєР°.",
         reply_markup=open_keyboard(),
     )
 
 async def bot_loop():
     bot = Bot(TOKEN)
-    await bot.set_my_commands([BotCommand(command="start", description="Открыть приложение")])
+    await bot.set_my_commands([BotCommand(command="start", description="РћС‚РєСЂС‹С‚СЊ РїСЂРёР»РѕР¶РµРЅРёРµ")])
     for admin_id in ADMIN_IDS:
         try:
             await bot.set_chat_menu_button(
                 chat_id=admin_id,
-                menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=PUBLIC_APP_URL)),
+                menu_button=MenuButtonWebApp(text="РћС‚РєСЂС‹С‚СЊ", web_app=WebAppInfo(url=PUBLIC_APP_URL)),
             )
         except TelegramAPIError:
-            logging.warning("Не удалось установить меню для ADMIN_IDS=%s", admin_id)
+            logging.warning("РќРµ СѓРґР°Р»РѕСЃСЊ СѓСЃС‚Р°РЅРѕРІРёС‚СЊ РјРµРЅСЋ РґР»СЏ ADMIN_IDS=%s", admin_id)
     await dp.start_polling(bot)
 
 async def serve():
@@ -60,3 +60,4 @@ async def serve():
 
 if __name__ == "__main__":
     asyncio.run(serve())
+
