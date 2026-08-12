@@ -2,7 +2,7 @@ const tg=window.Telegram?.WebApp; tg?.ready(); tg?.expand();
 const MELBET_URL='https://melbet.org/ru'; const home=document.querySelector('#home'); const screen=document.querySelector('#screen');
 const items=[['◈','Агенты','agents'],['♧','Партнёры','partners'],['▧','Получить баннер','banner'],['⌕','Проверить контакт','check'],['⊗','Заблокированный контакт','blocked'],['?','Вопросы и ответы','faq'],['◌','Поддержка','support']];
 function showHome(){screen.hidden=true;home.hidden=false;home.innerHTML=items.map(([icon,title,key])=>`<button class="btn ${key==='agents'?'primary':''}" onclick="openScreen('${key}')"><b>${icon}</b>${title}</button>`).join('')}
-function shell(title,body){screen.innerHTML=`<div class="topline"><button class="back" onclick="showHome()">‹ Назад</button><span class="brand-small">MB / PARTNERS</span></div><h2>${title}</h2>${body}`}
+function shell(title,body){screen.innerHTML=`<div class="topline"><button class="back" onclick="showHome()">‹ Назад</button><span class="brand-small">MELBET</span></div><h2>${title}</h2>${body}`}
 function openScreen(key){home.hidden=true;screen.hidden=false;
  if(key==='agents') return shell('Агенты','<button class="btn primary" onclick="window.open(\''+MELBET_URL+'\',\'_blank\')">☆ &nbsp;Стать агентом</button><button class="btn">♧ &nbsp;Я уже агент</button>');
  if(key==='partners') return shell('Партнёры','<button class="btn primary" onclick="window.open(\''+MELBET_URL+'\',\'_blank\')">✦ &nbsp;Стать партнёром</button><button class="btn">♧ &nbsp;Я уже партнёр</button>');
