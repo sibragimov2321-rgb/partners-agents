@@ -1,53 +1,56 @@
-﻿import asyncio
+import asyncio
 import logging
 import os
 from pathlib import Path
 
-from aiogram import Bot, Dispatcher, F
+import uvicorn
+from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonWebApp, WebAppInfo, Message
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-import uvicorn
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.environ["BOT_TOKEN"]
 PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:8000")
-ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()}
+ADMIN_IDS = {int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()}
 BASE = Path(__file__).resolve().parent.parent
 
 api = FastAPI(title="Partners & Agents Mini App")
 api.mount("/static", StaticFiles(directory=BASE / "web"), name="static")
+dp = Dispatcher()
 
 @api.get("/")
 async def index():
     return FileResponse(BASE / "web" / "index.html")
 
-dp = Dispatcher()
-
 def open_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
-        text="РћС‚РєСЂС‹С‚СЊ", web_app=WebAppInfo(url=PUBLIC_APP_URL)
+        text="Открыть", web_app=WebAppInfo(url=PUBLIC_APP_URL)
     )]])
 
 @dp.message(CommandStart())
 async def start(message: Message):
     await message.answer(
-        "вљЎ РќР°С‡РЅРёС‚Рµ СЂР°Р±РѕС‚Сѓ\n\nР§С‚РѕР±С‹ РїСЂРѕРґРѕР»Р¶РёС‚СЊ, РЅР°Р¶РјРёС‚Рµ РєРЅРѕРїРєСѓ В«РћС‚РєСЂС‹С‚СЊВ» РЅРёР¶Рµ рџ‘‡\n\n"
-        "Р’ РїСЂРёР»РѕР¶РµРЅРёРё РґРѕСЃС‚СѓРїРЅС‹ СЂРµРіРёСЃС‚СЂР°С†РёСЏ, РјР°С‚РµСЂРёР°Р»С‹, СЃС‚Р°С‚РёСЃС‚РёРєР° Рё РїРѕРґРґРµСЂР¶РєР°.",
+        "⚡ Начните работу\n\n"
+        "Чтобы продолжить, нажмите кнопку «Открыть» ниже 👇\n\n"
+        "В приложении доступны регистрация, материалы, статистика и поддержка.",
         reply_markup=open_keyboard(),
     )
 
 async def bot_loop():
     bot = Bot(TOKEN)
-    await bot.set_my_commands([BotCommand(command="start", description="РћС‚РєСЂС‹С‚СЊ РїСЂРёР»РѕР¶РµРЅРёРµ")])
+    await bot.set_my_commands([BotCommand(command="start", description="Открыть приложение")])
     for admin_id in ADMIN_IDS:
         try:
-            await bot.set_chat_menu_button(chat_id=admin_id, menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=PUBLIC_APP_URL)))
+            await bot.set_chat_menu_button(
+                chat_id=admin_id,
+                menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=PUBLIC_APP_URL)),
+            )
         except TelegramAPIError:
-            logging.warning("Could not set menu button for admin %s; check ADMIN_IDS", admin_id)
+            logging.warning("Не удалось установить меню для ADMIN_IDS=%s", admin_id)
     await dp.start_polling(bot)
 
 async def serve():
@@ -57,4 +60,3 @@ async def serve():
 
 if __name__ == "__main__":
     asyncio.run(serve())
-
