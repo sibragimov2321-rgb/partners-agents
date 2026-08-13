@@ -46,14 +46,23 @@ def open_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[
             InlineKeyboardButton(
-                text="\U0001F680 \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435",
+                text="Menu",
                 web_app=WebAppInfo(url=PUBLIC_APP_URL),
             )
         ]]
     )
 
 
+async def configure_menu(bot: Bot, chat_id: int | None = None) -> None:
+    """Set the Mini App button globally and for the current private chat."""
+    menu_button = MenuButtonWebApp(text="Menu", web_app=WebAppInfo(url=PUBLIC_APP_URL))
+    await bot.set_chat_menu_button(menu_button=menu_button)
+    if chat_id is not None:
+        await bot.set_chat_menu_button(chat_id=chat_id, menu_button=menu_button)
+
+
 async def send_portal(message: Message) -> None:
+    await configure_menu(message.bot, message.chat.id)
     await message.answer(
         "\U0001F680 \u0414\u043e\u0431\u0440\u043e \u043f\u043e\u0436\u0430\u043b\u043e\u0432\u0430\u0442\u044c \u0432 Partners Portal!\n\n"
         "\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u043a\u043d\u043e\u043f\u043a\u0443 \u00ab\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435\u00bb \u043d\u0438\u0436\u0435.\n\n"
@@ -98,9 +107,7 @@ async def bot_setup():
         BotCommand(command="menu", description="Open app menu"),
         BotCommand(command="help", description="How to use the app"),
     ])
-    await bot.set_chat_menu_button(
-        menu_button=MenuButtonWebApp(text="Menu", web_app=WebAppInfo(url=PUBLIC_APP_URL))
-    )
+    await configure_menu(bot)
     await bot.set_webhook(f"{PUBLIC_APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
     await asyncio.Event().wait()
 
