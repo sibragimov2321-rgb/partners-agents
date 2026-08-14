@@ -4,5 +4,5 @@ export const branding = Object.freeze({
   shortName: 'PM',
   supportUsername: '',
   website: '',
-  accent: '#2388ff',
+  accent: '#ffc400',
 });
