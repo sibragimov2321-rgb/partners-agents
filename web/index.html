@@ -6,6 +6,11 @@
   <meta name="theme-color" content="#111319">
   <title>MB Partners</title>
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body { background: #111319 url('/static/assets/partners-sport-bg.png') center top / cover fixed no-repeat; }
+    body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(10,12,16,.32), rgba(10,12,16,.78)); pointer-events: none; }
+    #app { min-height: 100vh; background: linear-gradient(180deg, rgba(17,19,25,.46), rgba(17,19,25,.8)); }
+  </style>
 </head>
 <body>
   <main id="app">
