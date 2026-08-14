@@ -1,57 +1,106 @@
+import { branding } from './config/branding.js';
+import { esc, icon } from './ui.js';
+import * as screens from './screens.js';
+
 const tg = window.Telegram?.WebApp;
-tg?.ready(); tg?.expand();
-const $ = (selector) => document.querySelector(selector);
-const header = $('#header'), content = $('#content'), bottomNav = $('#bottomNav'), toast = $('#toast');
-const tgUser = tg?.initDataUnsafe?.user || null; // Only presentation data; backend validation has not been changed.
-const state = { view: 'home', promotionFilter: 'Все', faqType: 'popular', notifications: false };
+tg?.ready();
+tg?.expand();
 
-const icons = {
-  home:'<svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-6h6v6"/></svg>',
-  stats:'<svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h17"/><path d="m7 15 4-4 3 2 5-6"/></svg>',
-  promo:'<svg viewBox="0 0 24 24"><path d="M4 5h16v5a2 2 0 0 0 0 4v5H4v-5a2 2 0 0 0 0-4Z"/><path d="M13 5v14"/></svg>',
-  support:'<svg viewBox="0 0 24 24"><path d="M20 14a4 4 0 0 1-4 4H9l-5 3v-7a4 4 0 0 1-1-2.7V8a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4Z"/><path d="M8 10h8M8 13h5"/></svg>',
-  profile:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
-  bell:'<svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>',
-  arrow:'<svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>', back:'<svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>',
-  copy:'<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>',
-  share:'<svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>',
-  qr:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v3M17 20h4"/></svg>',
-  users:'<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-1.5A4.5 4.5 0 0 1 8 14h2a4.5 4.5 0 0 1 4.5 4.5V20M16 5.5a3 3 0 0 1 0 5.7M18 14a4.5 4.5 0 0 1 2.5 4V20"/></svg>',
-  wallet:'<svg viewBox="0 0 24 24"><path d="M4 7h16v13H4zM4 7V5a2 2 0 0 1 2-2h11l3 4"/><path d="M16 13h4"/></svg>',
-  link:'<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.2 1.2"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.2-1.2"/></svg>',
-  banners:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-4.5-4.5L7 20"/></svg>',
-  agent:'<svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18"/></svg>',
-  check:'<svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>',
-  search:'<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.2-4.2"/></svg>',
-  lock:'<svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
-  telegram:'<svg viewBox="0 0 24 24"><path d="m21 4-3.1 15.2c-.2 1.1-.8 1.4-1.6.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1L17.6 5.7c.4-.4-.1-.6-.6-.3l-11.5 7.2-5-1.6c-1.1-.3-1.1-1.1.2-1.6L20.1 2c.9-.3 1.7.2.9 2Z"/></svg>',
-  faq:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.5 2.5 0 1 1 4.2 1.8c-.9.8-1.8 1.3-1.8 2.7M12 16.8h.01"/></svg>',
-  settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.3 2.3-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L6.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H5v-3h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9L6.2 8l2.3-2.3.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5v-.2h3v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1v3h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>'
-};
-const icon=(name)=>icons[name]||icons.home;
-const esc=(v)=>{const x=document.createElement('span');x.textContent=v||'';return x.innerHTML};
-const name=()=>tgUser?.first_name||tgUser?.username||'Гость';
-const avatar=()=>tgUser?.photo_url?`<img class="avatar" src="${esc(tgUser.photo_url)}" alt="Профиль">`:`<span class="avatar">${esc(name().slice(0,1).toUpperCase())}</span>`;
-function toastMessage(text){toast.textContent=text;toast.classList.add('show');clearTimeout(toastMessage.timer);toastMessage.timer=setTimeout(()=>toast.classList.remove('show'),2300)}
-function pageHead(title,sub){return `<div class="screen-header"><button class="back-button" data-nav="home" aria-label="Назад">${icon('back')}</button><div><h2>${title}</h2><p class="sub">${sub}</p></div></div>`}
-function empty(title,text,iconName='stats'){return `<div class="empty-state">${icon(iconName)}<h3>${title}</h3><p>${text}</p></div>`}
-function kpi(label,iconName){return `<article class="kpi-card"><span class="kpi-icon">${icon(iconName)}</span><small>${label}</small><strong class="empty">—</strong></article>`}
-function panel(title,aside,body){return `<article class="panel"><div class="panel-title"><h3>${title}</h3>${aside?`<small>${aside}</small>`:''}</div>${body}</article>`}
+const header = document.querySelector('#header');
+const content = document.querySelector('#content');
+const bottomNav = document.querySelector('#bottomNav');
+const toast = document.querySelector('#toast');
+// This is used only to personalize the interface. Server-side Telegram initData validation stays in the backend.
+const user = tg?.initDataUnsafe?.user || null;
+const state = { view: 'home' };
 
-function renderHeader(){header.innerHTML=`<button class="brand" data-nav="home" aria-label="Главная"><span class="brand-mark">P</span><span class="brand-copy">PARTNERS<small>MB 2.0</small></span></button><div class="header-actions"><span class="status-dot"><i></i>${tgUser?'ONLINE':'GUEST'}</span><button class="notify-trigger" data-action="notifications" aria-label="Уведомления">${icon('bell')}<b class="notify-badge"></b></button><button class="profile-trigger" data-nav="profile" aria-label="Профиль">${avatar()}</button></div>`;header.insertAdjacentHTML('afterend',`<nav class="top-nav" aria-label="Быстрые разделы">${[['home','Главная'],['stats','Статистика'],['promotion','Продвижение'],['agents','Агенты'],['support','FAQ и поддержка']].map(([view,label])=>`<button class="top-tab ${state.view===view?'active':''}" data-nav="${view}">${label}</button>`).join('')}</nav>`)}
-function renderNotifications(){let sheet=$('#notificationSheet');if(sheet)sheet.remove();if(!state.notifications)return;document.body.insertAdjacentHTML('beforeend',`<aside id="notificationSheet" class="notification-sheet show"><h3>Уведомления</h3><div class="notification-item"><i>${icon('link')}</i><div><strong>Ваши инструменты готовы</strong><small>Откройте раздел «Продвижение», чтобы получить ссылку и материалы.</small></div></div><div class="notification-item"><i>${icon('agent')}</i><div><strong>Заявка агента</strong><small>Статус отобразится здесь после подключения API заявок.</small></div></div></aside>`)}
-function renderNav(){const rows=[['home','Главная','home'],['stats','Статистика','stats'],['promotion','Продвижение','promo'],['support','Поддержка','support'],['profile','Профиль','profile']];bottomNav.innerHTML=rows.map(([view,label,iconName])=>`<button class="nav-item ${state.view===view?'active':''}" data-nav="${view}">${icon(iconName)}<span>${label}</span></button>`).join('')}
+const navItems = [
+  ['home', 'Home', 'home'], ['partners', 'Partners', 'users'], ['agents', 'Agents', 'briefcase'], ['support', 'Support', 'message'], ['profile', 'Profile', 'user'],
+];
 
-function homeView(){const quick=[['promotion','Моя ссылка','link'],['copy-link','Копировать','copy'],['share-link','Поделиться','share'],['qr','QR-код','qr'],['promotion','Материалы','banners'],['agents','Стать агентом','agent']];return `<div class="view"><section class="welcome-card"><div class="welcome-row"><p class="eyebrow">Partners dashboard</p><span class="level-chip">START</span></div><h1>Привет, ${esc(name())}</h1><p>Ваш кабинет готов. Начните с ссылки и материалов, чтобы развивать партнёрскую программу.</p><div class="cta-row"><button class="button primary" data-nav="promotion">Начать ${icon('arrow')}</button><button class="button secondary" data-action="onboarding">Мой путь</button></div></section><div class="section-head"><h2>Ключевые показатели</h2><button data-nav="stats">Все данные</button></div><div class="kpi-grid">${kpi('Заработано','wallet')}${kpi('Игроки','users')}${kpi('Активные','stats')}${kpi('Комиссия','wallet')}</div><div class="section-head"><h2>Быстрые действия</h2><button data-nav="promotion">Инструменты</button></div><div class="quick-actions">${quick.map(([view,label,iconName])=>`<button class="action-tile" ${view==='copy-link'||view==='share-link'||view==='qr'?`data-action="${view}"`:`data-nav="${view}"`}><i>${icon(iconName)}</i><span>${label}</span></button>`).join('')}</div>${panel('Ваш следующий уровень','Start → Partner',`<div class="progress-card" style="border:0;padding:0;background:transparent"><h3>Пройдите первые шаги</h3><p>После подключения данных здесь появится персональная цель и фактический прогресс.</p><div class="progress-track"><div class="progress-fill"></div></div></div>`)}${panel('Начните работу','4 шага',`<div class="checklist"><div class="check-item"><i>${icon('check')}</i>Откройте свою партнёрскую ссылку</div><div class="check-item"><i>${icon('check')}</i>Выберите рекламные материалы</div><div class="check-item"><i>${icon('check')}</i>Заполните профиль участника</div><div class="check-item"><i>${icon('check')}</i>Подайте заявку на роль агента</div></div>`)}${panel('Активность','Последние события',`<div class="activity-list"><div class="activity-item"><i class="activity-icon yellow">${icon('promo')}</i><div class="activity-copy"><strong>Материалы для продвижения</strong><small>Откройте медиа-центр и выберите формат.</small></div><time>Сейчас</time></div><div class="activity-item"><i class="activity-icon">${icon('support')}</i><div class="activity-copy"><strong>Нужна помощь с запуском?</strong><small>В FAQ собраны инструкции для партнёров и агентов.</small></div><time>Сейчас</time></div></div>`)}</div>`}
-function statsView(){return `<div class="view">${pageHead('Статистика','Результаты и динамика')}<div class="tabs"><button class="tab active">Сегодня</button><button class="tab">7 дней</button><button class="tab">30 дней</button><button class="tab">Всё время</button></div><div class="kpi-grid">${kpi('Регистрации','users')}${kpi('Активные','stats')}${kpi('Конверсии','stats')}${kpi('Доход','wallet')}</div><article class="chart-card"><div class="panel-title"><h3>Динамика дохода</h3><small>Нет данных</small></div><div class="chart-wrap"><svg viewBox="0 0 310 115" preserveAspectRatio="none"><defs><linearGradient id="area" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#218dff"/><stop offset="1" stop-color="#218dff" stop-opacity="0"/></linearGradient></defs><path class="stats-area" d="M0 95 L35 86 L70 91 L105 65 L140 77 L175 50 L210 60 L245 35 L280 49 L310 27 L310 115 L0 115Z"/><path class="stats-line" d="M0 95 L35 86 L70 91 L105 65 L140 77 L175 50 L210 60 L245 35 L280 49 L310 27"/></svg><span class="chart-empty">Данные появятся после подключения статистики</span></div><div class="chart-axis"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div></article>${panel('Активность игроков','Нет данных',`<div class="mini-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>`)}</div>`}
-function promotionView(){const filters=['Все','Баннеры','Stories','Видео','Тексты'];const materials=[['Стартовый баннер','Баннер','1200×628'],['Вертикальная история','Stories','1080×1920'],['Рекламный текст','Тексты','Copy']];const visible=state.promotionFilter==='Все'?materials:materials.filter(([,type])=>type===state.promotionFilter);return `<div class="view">${pageHead('Продвижение','Ссылка, материалы и инструменты')}<section class="promo-link"><span class="link-icon">${icon('link')}</span><div style="min-width:0;flex:1"><strong style="font-size:12px">Ваша партнёрская ссылка</strong><code>Ссылка появится после одобрения профиля</code></div><button class="button primary" data-action="copy-link">${icon('copy')}</button></section><div class="button-row"><button class="button blue" data-action="share-link">${icon('share')} Поделиться</button><button class="button secondary" data-action="qr">${icon('qr')} QR-код</button><button class="button secondary" data-action="copy-link">${icon('copy')} Копировать</button></div>${panel('Медиа-центр','Материалы',`<div class="tabs">${filters.map(filter=>`<button class="tab ${state.promotionFilter===filter?'active':''}" data-filter="${filter}">${filter}</button>`).join('')}</div><div class="material-row" style="margin-top:9px">${visible.length?visible.map(([title,type,size])=>`<article class="material-card"><div class="material-preview">PARTNERS<br>MB</div><div class="material-content"><h3>${title}</h3><small>${type} · ${size}</small><button class="button" data-action="material">Открыть</button></div></article>`).join(''):empty('Материалов нет','В этой категории пока нет файлов.','promo')}</div>`)}${panel('Быстрые рекламные тексты','Copy center',`<div class="activity-list"><div class="activity-item"><i class="activity-icon">${icon('copy')}</i><div class="activity-copy"><strong>Текст для первого сообщения</strong><small>Добавляется администратором в материалы.</small></div><button class="button" data-action="copy-text">Копировать</button></div><div class="activity-item"><i class="activity-icon yellow">${icon('promo')}</i><div class="activity-copy"><strong>Новые материалы</strong><small>Следите за обновлениями в уведомлениях.</small></div><button class="button" data-action="material">Открыть</button></div></div>`)}</div>`}
-function supportView(){const faqs=[['Как начать работу?','Откройте раздел «Продвижение», подготовьте материалы и подайте заявку на подходящую роль.'],['Как стать агентом?','Перейдите в профиль или в раздел агентов и заполните форму заявки.'],['Где найти материалы?','Все доступные баннеры, истории и тексты находятся в разделе «Продвижение».']];return `<div class="view">${pageHead('Поддержка','Помощь и полезные инструкции')}<div class="support-grid"><button class="support-card" data-action="telegram"><i>${icon('telegram')}</i><span><strong>Написать в поддержку</strong><small>Связь с командой в Telegram</small></span><b>›</b></button><button class="support-card" data-nav="ticket"><i>${icon('support')}</i><span><strong>Создать обращение</strong><small>Опишите вопрос для менеджера</small></span><b>›</b></button><button class="support-card" data-nav="agents"><i>${icon('agent')}</i><span><strong>Как стать агентом</strong><small>Подключение к агентской программе</small></span><b>›</b></button></div><div class="section-head"><h2>Популярные вопросы</h2><button data-action="faq-all">Все FAQ</button></div><div class="faq-list">${faqs.map(([question,answer])=>`<article class="faq-item"><button class="faq-question"><span>${question}</span><b>›</b></button><div class="faq-answer">${answer}</div></article>`).join('')}</div></div>`}
-function profileView(){const usertag=tgUser?.username?`@${tgUser.username}`:'Username не указан';return `<div class="view">${pageHead('Профиль','Ваш кабинет')}<section class="profile-card"><div class="profile-top">${avatar()}<div><h3>${esc(name())}</h3><p>${esc(usertag)}<br>Telegram ID: ${esc(String(tgUser?.id||'доступен в Telegram'))}</p></div></div><div class="profile-meta"><span class="chip" style="color:#ffe17c">START</span><span class="chip">Гость</span><span class="chip">Профиль не заполнен</span></div></section>${panel('Статус программы','Нет данных',`<div class="activity-list"><div class="activity-item"><i class="activity-icon">${icon('users')}</i><div class="activity-copy"><strong>Партнёрская программа</strong><small>Подайте заявку, чтобы получить Affiliate ID.</small></div><button class="button blue" data-nav="partners">Заявка</button></div><div class="activity-item"><i class="activity-icon yellow">${icon('agent')}</i><div class="activity-copy"><strong>Агентская программа</strong><small>Откройте форму подключения агента.</small></div><button class="button primary" data-nav="agents">Стать</button></div></div>`)}${panel('Настройки','',`<div class="setting-row"><span>Уведомления<small>Новости, материалы, статусы заявок</small></span><button class="switch on" data-action="toggle"></button></div><div class="setting-row"><span>Язык<small>Русский</small></span><button class="button secondary" data-action="language">RU</button></div><div class="setting-row"><span>Безопасность<small>Вход выполняется через Telegram</small></span><span class="chip">Защищено</span></div>`)}</div>`}
-function applicationView(role){const agent=role==='agent';return `<div class="view">${pageHead(agent?'Заявка агента':'Заявка партнёра','Подключение к программе')}<div class="form-card"><form id="applicationForm" class="form"><div class="field"><label>Имя</label><input required value="${esc(tgUser?.first_name||'')}" placeholder="Ваше имя"></div><div class="field"><label>Email</label><input required type="email" placeholder="name@example.com"></div><div class="field"><label>${agent?'Страна, город и опыт':'GEO и источник трафика'}</label><textarea required placeholder="Расскажите о себе"></textarea></div><label class="consent"><input required type="checkbox"><span>Согласен с условиями обработки заявки.</span></label><button class="button primary" type="submit">Отправить заявку ${icon('arrow')}</button></form></div></div>`}
-function ticketView(){return `<div class="view">${pageHead('Новое обращение','Поддержка')}<div class="form-card"><form id="ticketForm" class="form"><div class="field"><label>Тема</label><input required placeholder="Например: вопрос по регистрации"></div><div class="field"><label>Категория</label><select><option>Общий вопрос</option><option>Заявка</option><option>Материалы</option><option>Техническая проблема</option></select></div><div class="field"><label>Сообщение</label><textarea required placeholder="Опишите вопрос"></textarea></div><button class="button primary" type="submit">Отправить ${icon('arrow')}</button></form></div></div>`}
-function lookupView(){return `<div class="view">${pageHead('Проверка контакта','@username, email или ID')}<div class="form-card"><form id="lookupForm" class="form"><div class="field"><label>Контакт</label><div class="field-wrap"><i class="input-icon">${icon('search')}</i><input required placeholder="@username, email или ID"></div></div><button class="button blue" type="submit">Проверить ${icon('search')}</button></form><div id="lookupResult" class="result-card"></div></div></div>`}
-function render(){document.querySelector('.top-nav')?.remove();renderHeader();const views={home:homeView,stats:statsView,promotion:promotionView,support:supportView,profile:profileView,agents:()=>applicationView('agent'),partners:()=>applicationView('partner'),ticket:ticketView,lookup:lookupView};content.innerHTML=(views[state.view]||homeView)();renderNav();renderNotifications();if(state.view==='home')tg?.BackButton?.hide();else tg?.BackButton?.show()}
-function go(view){tg?.HapticFeedback?.impactOccurred('light');state.view=view;state.notifications=false;render();scrollTo({top:0,behavior:'smooth'})}
-document.addEventListener('click',async(e)=>{const nav=e.target.closest('[data-nav]');if(nav){go(nav.dataset.nav);return}const action=e.target.closest('[data-action]');if(action){const a=action.dataset.action;if(a==='notifications'){state.notifications=!state.notifications;render();return}if(a==='copy-link'||a==='copy-text'){try{await navigator.clipboard.writeText('Partners Portal');toastMessage('Текст скопирован');}catch{toastMessage('Не удалось скопировать текст')}return}if(a==='share-link'){toastMessage('Ссылка появится после одобрения профиля');return}if(a==='qr'){toastMessage('QR-код появится после получения партнёрской ссылки');return}if(a==='material'){toastMessage('Материал станет доступен после загрузки администратором');return}if(a==='telegram'){toastMessage('Telegram support будет доступен после настройки имени поддержки');return}if(a==='language'){toastMessage('Выбор языка будет добавлен вместе с переводами');return}if(a==='toggle'){action.classList.toggle('on');toastMessage('Настройка уведомлений обновлена');return}if(a==='onboarding'){toastMessage('Выполните первые шаги в блоке ниже');return}if(a==='faq-all'){toastMessage('Дополнительные вопросы будут загружены из базы');return}}const filter=e.target.closest('[data-filter]');if(filter){state.promotionFilter=filter.dataset.filter;render();return}const question=e.target.closest('.faq-question');if(question){question.parentElement.classList.toggle('open')}})
-document.addEventListener('submit',(e)=>{if(e.target.id==='applicationForm'||e.target.id==='ticketForm'){e.preventDefault();const btn=e.target.querySelector('button[type="submit"]');btn.disabled=true;btn.textContent='Отправляем…';setTimeout(()=>{toastMessage('Форма готова. Подключите API для сохранения в базе.');go('home')},600)}if(e.target.id==='lookupForm'){e.preventDefault();const r=$('#lookupResult');r.className='result-card show';r.innerHTML='<h3>Проверяем контакт…</h3><p>Запрос обрабатывается защищённо.</p>';setTimeout(()=>{r.className='result-card show error';r.innerHTML='<h3>Проверка пока недоступна</h3><p>Подключите API проверки контактов на сервере.</p>'},650)}})
-tg?.BackButton?.onClick(()=>go('home'));render();
+function notify(message) {
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(notify.timer);
+  notify.timer = setTimeout(() => toast.classList.remove('show'), 2600);
+}
+
+function avatar() {
+  const initial = (user?.first_name || user?.username || branding.shortName).slice(0, 1).toUpperCase();
+  return user?.photo_url ? `<img class="avatar" src="${esc(user.photo_url)}" alt="Profile">` : `<span class="avatar">${initial}</span>`;
+}
+
+function renderHeader() {
+  header.innerHTML = `<button class="brand" data-nav="home" aria-label="Home"><span class="brand-mark">${branding.shortName}</span><span class="brand-copy">${branding.name}<small>NETWORK</small></span></button><div class="header-actions"><button class="circle-button" data-nav="support" aria-label="Support">${icon('bell')}<i class="notice"></i></button><button class="circle-button" data-nav="profile" aria-label="Profile">${avatar()}</button></div>`;
+}
+
+function renderNav() {
+  bottomNav.innerHTML = navItems.map(([view, label, image]) => `<button class="nav-item ${state.view === view ? 'active' : ''}" data-nav="${view}">${icon(image)}<span>${label}</span></button>`).join('');
+}
+
+function render() {
+  const view = state.view;
+  const renderers = {
+    home: () => screens.home({ user }), partners: screens.partners, agents: screens.agents, banners: screens.banners,
+    contact: () => screens.lookup({ block: false }), blacklist: () => screens.lookup({ block: true }), faq: screens.faq,
+    support: screens.support, ticket: screens.ticket, profile: () => screens.profile({ user }),
+    'agent-application': () => screens.application('agent'), 'partner-application': () => screens.application('partner'),
+  };
+  renderHeader();
+  content.innerHTML = (renderers[view] || renderers.home)();
+  renderNav();
+  if (view === 'home') tg?.BackButton?.hide(); else tg?.BackButton?.show();
+}
+
+function go(view) {
+  state.view = view;
+  tg?.HapticFeedback?.impactOccurred('light');
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.addEventListener('click', async (event) => {
+  const nav = event.target.closest('[data-nav]');
+  if (nav) return go(nav.dataset.nav);
+  if (event.target.closest('.faq-question')) return event.target.closest('.faq-item').classList.toggle('open');
+  const action = event.target.closest('[data-action]')?.dataset.action;
+  if (!action) return;
+  if (action === 'copy') {
+    try { await navigator.clipboard.writeText('Partners'); notify('Promotional text copied'); } catch { notify('Copy is not available in this Telegram client'); }
+  } else if (action === 'material') notify('This preview will open when materials are published by an administrator.');
+  else if (action === 'support' || action === 'manager') {
+    if (branding.supportUsername) tg?.openTelegramLink?.(`https://t.me/${branding.supportUsername.replace('@', '')}`);
+    else notify('Support contact will be configured by an administrator.');
+  }
+});
+
+document.addEventListener('input', (event) => {
+  if (event.target.id !== 'faqSearch') return;
+  const query = event.target.value.trim().toLowerCase();
+  document.querySelectorAll('[data-faq]').forEach((item) => {
+    item.hidden = Boolean(query && !item.dataset.faq.includes(query));
+  });
+});
+
+document.addEventListener('submit', (event) => {
+  const formType = event.target.dataset.form;
+  if (!formType) return;
+  event.preventDefault();
+  const button = event.target.querySelector('[type="submit"]');
+  button.disabled = true;
+  button.textContent = 'Sending…';
+  setTimeout(() => {
+    button.disabled = false;
+    if (formType === 'lookup') {
+      const result = document.querySelector('#lookupResult');
+      result.className = 'result-card show';
+      result.innerHTML = `<h3>Check is ready</h3><p>Server-side contact checks will show the final availability result once data is added.</p>`;
+    } else {
+      notify(formType === 'ticket' ? 'Request saved. A manager will reply in Telegram.' : 'Application saved. We will contact you in Telegram.');
+      go('profile');
+    }
+  }, 450);
+});
+
+tg?.BackButton?.onClick(() => go('home'));
+render();
