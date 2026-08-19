@@ -18,7 +18,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from .storage import init_storage
-from .webapi import ApplicationIn, ContactCheckIn, TicketIn, check_contact, current_user, profile_payload, submit_application, submit_ticket
+from .webapi import ApplicationIn, ContactCheckIn, TicketIn, check_contact, check_manager, current_user, profile_payload, submit_application, submit_ticket
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.environ["BOT_TOKEN"]
@@ -74,6 +74,11 @@ async def blocked_check(payload: ContactCheckIn, user: dict = Depends(current_us
     return check_contact(payload, blocked_only=True)
 
 
+@api.post("/api/check-manager")
+async def manager_check(payload: ContactCheckIn, user: dict = Depends(current_user)):
+    return check_manager(payload)
+
+
 def open_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[[
@@ -98,7 +103,7 @@ async def send_portal(message: Message) -> None:
     await message.answer(
         "\U0001F680 Добро пожаловать в MELBET PARTNERS!\n\n"
         "\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u043a\u043d\u043e\u043f\u043a\u0443 \u00ab\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435\u00bb \u043d\u0438\u0436\u0435.\n\n"
-        "Внутри доступны: агенты, партнёры, баннеры, проверки, FAQ, поддержка и личный кабинет.",
+        "Внутри доступны: стать агентом, кабинет агента, проверка агента, проверка менеджера и поддержка.",
         reply_markup=open_keyboard(),
     )
 

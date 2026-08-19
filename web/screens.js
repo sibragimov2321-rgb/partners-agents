@@ -1,4 +1,4 @@
-import { esc, icon, pageHead } from './ui.js?v=20260819-3';
+import { esc, icon, pageHead } from './ui.js?v=20260819-4';
 const button=(text,attrs='',kind='primary')=>`<button class="app-btn ${kind}" ${attrs}>${text}</button>`;
 const info={reviewing:['⏳','Заявка на рассмотрении','Мы проверяем данные.'],approved:['✅','Агент подтверждён','Ваш кабинет активен.'],blocked:['❌','Доступ ограничен','Обратитесь в поддержку.'],rejected:['⚠️','Нужны дополнительные данные','Менеджер свяжется с вами.']};
 export const loading=()=>'<div class="view skeleton"><i></i><i></i><i></i></div>';
@@ -8,31 +8,30 @@ export function home(account){
   return `<div class="view melbet-dashboard">
     <section class="kinetic-hero">
       <div class="hero-orbit" aria-hidden="true"></div>
-      <div class="hero-brand"><b>MEL</b><strong>BET</strong><span>PARTNERS HUB</span></div>
+      <div class="hero-brand"><b>MEL</b><strong>BET</strong><span>PARTNERS</span></div>
       <div class="hero-badge">AGENT & AFFILIATE NETWORK</div>
       <h1>Ваш центр<br><em>партнёрского роста</em></h1>
       <p>Заявки, материалы, проверки и поддержка — в одном рабочем пространстве.</p>
       <button class="hero-action" data-nav="${a?'profile':'agents'}"><span>${a?'Открыть кабинет':'Начать работу'}</span>${icon('arrow')}</button>
     </section>
     ${status?`<button class="application-status compact-status" data-nav="check"><span>${status[0]}</span><div><b>${status[1]}</b><small>Посмотреть статус заявки</small></div>${icon('arrow')}</button>`:''}
-    <div class="dashboard-heading"><div><span>БЫСТРЫЙ ДОСТУП</span><h2>Рабочая панель</h2></div><small>7 сервисов</small></div>
+    <div class="dashboard-heading"><div><span>БЫСТРЫЙ ДОСТУП</span><h2>Рабочая панель</h2></div><small>5 сервисов</small></div>
     <section class="action-deck">
-      <button class="deck-card deck-agent" data-nav="agents"><i>${icon('briefcase')}</i><span><small>АГЕНТАМ</small><b>Стать агентом</b><em>Заявка и кабинет</em></span>${icon('arrow')}</button>
-      <button class="deck-card deck-partner" data-nav="partners"><i>${icon('users')}</i><span><small>ПАРТНЁРАМ</small><b>Партнёрская программа</b></span>${icon('arrow')}</button>
-      <button class="deck-card deck-media" data-nav="banners"><i>${icon('image')}</i><span><small>МАТЕРИАЛЫ</small><b>Получить баннер</b><em>Готовые креативы</em></span>${icon('arrow')}</button>
-      <button class="deck-card deck-contact" data-nav="contact"><i>${icon('search')}</i><span><b>Проверить<br>контакт</b></span></button>
-      <button class="deck-card deck-blocked" data-nav="blocked"><i>${icon('shield')}</i><span><b>Блок-лист</b><em>Проверка ID</em></span></button>
-    </section>
-    <section class="utility-strip">
-      <button data-nav="faq">${icon('help')}<span><b>FAQ</b><small>Ответы на вопросы</small></span>${icon('arrow')}</button>
-      <button data-nav="support">${icon('message')}<span><b>Поддержка</b><small>Связаться с нами</small></span>${icon('arrow')}</button>
+      <button class="deck-card deck-agent" data-nav="apply"><i>${icon('briefcase')}</i><span><small>РЕГИСТРАЦИЯ</small><b>Стать агентом</b><em>Отправить заявку</em></span>${icon('arrow')}</button>
+      <button class="deck-card deck-partner" data-nav="check"><i>${icon('user')}</i><span><small>КАБИНЕТ</small><b>Я уже агент</b></span>${icon('arrow')}</button>
+      <button class="deck-card deck-media" data-nav="agent_lookup"><i>${icon('search')}</i><span><small>БЕЗОПАСНОСТЬ</small><b>Проверка агента</b></span>${icon('arrow')}</button>
+      <button class="deck-card deck-contact" data-nav="manager_lookup"><i>${icon('shield')}</i><span><b>Проверка<br>менеджера</b></span></button>
+      <button class="deck-card deck-blocked" data-nav="support"><i>${icon('message')}</i><span><b>Поддержка</b><em>Помощь менеджера</em></span></button>
     </section>
   </div>`
 }
 export function agents(account){const a=account?.application;return `<div class="view">${pageHead('Агенты','MELBET Partners')}${a?`<section class="status-card"><b>${(info[a.status]||info.reviewing)[0]}</b><h2>${(info[a.status]||info.reviewing)[1]}</h2><p>${(info[a.status]||info.reviewing)[2]}</p>${button('Открыть кабинет','data-nav="profile"')}</section>`:`<section class="choice-stack"><button class="featured" data-nav="apply">${icon('briefcase')}<span><b>Стать агентом</b><small>Подать заявку на регистрацию</small></span>${icon('arrow')}</button><button data-nav="check">${icon('user')}<span><b>Я уже агент</b><small>Проверить статус по Telegram ID</small></span>${icon('arrow')}</button></section>`}</div>`}
 export const partners=()=>`<div class="view">${pageHead('Партнёры','MELBET Partners')}<section class="choice-stack"><button class="featured" data-nav="support">${icon('users')}<span><b>Стать партнёром</b><small>Связаться с менеджером программы</small></span>${icon('arrow')}</button><button data-nav="profile">${icon('user')}<span><b>Я уже партнёр</b><small>Открыть личный кабинет</small></span>${icon('arrow')}</button></section></div>`;
 export const banners=()=>`<div class="view">${pageHead('Получить баннер','Материалы для продвижения')}<div class="category-tabs"><button class="active">Все</button><button>Telegram</button><button>Stories</button><button>Posts</button></div><section class="banner-empty">${icon('image')}<h2>Материалы готовятся</h2><p>Опубликованные администратором баннеры появятся здесь без обновления приложения.</p></section></div>`;
-export function lookup(blocked=false){return `<div class="view">${pageHead(blocked?'Заблокированный контакт':'Проверить контакт',blocked?'Telegram, email или ID':'Telegram или email')}<section class="lookup-premium"><div class="lookup-icon">${icon(blocked?'shield':'search')}</div><h2>${blocked?'Проверка блок-листа':'Проверка контакта'}</h2><p>Введите данные контакта для проверки.</p><form data-form="lookup" data-check="${blocked?'blocked':'contact'}"><input name="query" required placeholder="${blocked?'@username, email или ID':'@username или email'}">${button(`${icon('search')} Проверить`,'type="submit"')}</form><div class="lookup-result" hidden></div><div class="lookup-note">Персональные данные других пользователей не отображаются.</div></section></div>`}
+export function lookup(kind='agent'){
+  const manager=kind==='manager';
+  return `<div class="view">${pageHead(manager?'Проверка менеджера':'Проверка агента',manager?'Telegram username или ID':'Email или Telegram ID')}<section class="lookup-premium"><div class="lookup-icon">${icon(manager?'shield':'search')}</div><h2>${manager?'Официальный менеджер':'Агент в системе'}</h2><p>${manager?'Введите username или Telegram ID менеджера.':'Введите email или Telegram ID агента.'}</p><form data-form="lookup" data-check="${kind}"><input name="query" required placeholder="${manager?'@username или Telegram ID':'Email или Telegram ID'}">${button(`${icon('search')} Проверить`,'type="submit"')}</form><div class="lookup-result" hidden></div><div class="lookup-note">Персональные данные других пользователей не отображаются.</div></section></div>`
+}
 export const faq=()=>{const questions=['Какие виды трафика разрешены?','Какие модели сотрудничества доступны?','Есть ли реферальная программа?','Как часто обновляется статистика?','Когда происходят выплаты?','Как стать агентом?','Как получить рекламные материалы?','Как связаться с менеджером?'];return `<div class="view">${pageHead('Вопросы и ответы','Для партнёров и агентов')}<div class="faq-switch"><button class="active">Для партнёров</button><button>Для агентов</button></div><section class="faq-stack">${questions.map(q=>`<article class="faq-row"><button class="faq-question">${q}<i>+</i></button><p>Подробный ответ будет добавлен администратором программы.</p></article>`).join('')}</section></div>`}
 export function application(v={}){const val=n=>esc(v[n]||'');return `<div class="view">${pageHead('Стать агентом','Шаг 1 из 2 · ваши данные')}<form class="form-card" data-form="application"><div class="stepper"><i class="active"></i><i></i></div>${[['Имя','name','Ваше имя'],['Email','email','name@example.com'],['Страна','country','Ваша страна'],['Телефон','phone','+7 000 000 00 00']].map(([l,n,p])=>`<label class="field"><span>${l} *</span><input ${n==='email'?'type="email"':''} name="${n}" required value="${val(n)}" placeholder="${p}"></label>`).join('')}<label class="field"><span>Опыт работы</span><textarea name="experience">${val('experience')}</textarea></label><label class="consent"><input type="checkbox" required><span>Согласен с обработкой заявки.</span></label>${button('Отправить заявку','type="submit"')}</form></div>`}
 export function check(account){const a=account?.application,s=a?(info[a.status]||info.reviewing):['❌','Агент не найден','Подайте заявку, чтобы начать работу.'];return `<div class="view">${pageHead('Проверить агента','Статус по вашему Telegram ID')}<section class="status-card"><b>${s[0]}</b><h2>${s[1]}</h2><p>${s[2]}</p>${a?`<small>Заявка №${a.id}</small>`:button('Стать агентом','data-nav="apply"')}</section></div>`}

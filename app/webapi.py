@@ -13,6 +13,8 @@ from .storage import AgentApplication, SupportTicket, engine, get_application
 import os
 
 TOKEN = os.environ["BOT_TOKEN"]
+MANAGER_IDS = {item.strip() for item in os.getenv("ADMIN_IDS", "").split(",") if item.strip()}
+SUPPORT_USERNAME = os.getenv("SUPPORT_USERNAME", "").strip().lower().lstrip("@")
 
 
 def telegram_user(init_data: str | None) -> dict:
@@ -81,3 +83,10 @@ def check_contact(payload: ContactCheckIn, blocked_only: bool = False) -> dict:
         if blocked_only:
             return {"blocked": bool(application and application.status == "blocked")}
         return {"registered": bool(application)}
+
+
+def check_manager(payload: ContactCheckIn) -> dict:
+    """Verify only managers explicitly configured by the project owner."""
+    query = payload.query.strip().lower().lstrip("@")
+    verified = query in MANAGER_IDS or bool(SUPPORT_USERNAME and query == SUPPORT_USERNAME)
+    return {"verified": verified}
