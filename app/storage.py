@@ -7,6 +7,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 def database_url() -> str:
     url = os.getenv("DATABASE_URL", "sqlite:///./partners-agent.db")
+    url = url.replace("postgres://", "postgresql://", 1)
     return url.replace("postgresql://", "postgresql+psycopg://", 1)
 
 
