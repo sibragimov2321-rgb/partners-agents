@@ -1,6 +1,6 @@
-import { branding } from './config/branding.js';
-import { icon } from './ui.js';
-import * as screens from './screens.js';
+import { branding } from './config/branding.js?v=20260819-3';
+import { icon } from './ui.js?v=20260819-3';
+import * as screens from './screens.js?v=20260819-3';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const supportsBack=Boolean(tg?.isVersionAtLeast?.('6.1'));
 const supportsHaptics=Boolean(tg?.isVersionAtLeast?.('6.1'));

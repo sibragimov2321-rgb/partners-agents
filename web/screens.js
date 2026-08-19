@@ -1,8 +1,34 @@
-import { esc, icon, pageHead } from './ui.js';
+import { esc, icon, pageHead } from './ui.js?v=20260819-3';
 const button=(text,attrs='',kind='primary')=>`<button class="app-btn ${kind}" ${attrs}>${text}</button>`;
 const info={reviewing:['⏳','Заявка на рассмотрении','Мы проверяем данные.'],approved:['✅','Агент подтверждён','Ваш кабинет активен.'],blocked:['❌','Доступ ограничен','Обратитесь в поддержку.'],rejected:['⚠️','Нужны дополнительные данные','Менеджер свяжется с вами.']};
 export const loading=()=>'<div class="view skeleton"><i></i><i></i><i></i></div>';
-export function home(account){const a=account?.application;return `<div class="view melbet-home"><section class="brand-hero"><div class="brand-word"><b>MEL</b><strong>BET</strong><span>PARTNERS</span></div><img src="/static/assets/branding/melbet-partners-panther-v1.png" alt="MELBET Partners"><div class="hero-copy"><span>PARTNERS & AGENTS</span><h1>Развивайте бизнес<br>вместе с нами</h1><p>Регистрация, материалы, статистика и поддержка в одном приложении.</p></div></section>${a?`<button class="application-status" data-nav="check"><span>${(info[a.status]||info.reviewing)[0]}</span><div><b>${(info[a.status]||info.reviewing)[1]}</b><small>Нажмите, чтобы посмотреть статус</small></div>${icon('arrow')}</button>`:''}<section class="portal-menu"><button class="featured" data-nav="agents">${icon('briefcase')}<span><b>Агенты</b><small>Стать агентом или открыть кабинет</small></span>${icon('arrow')}</button><button data-nav="partners">${icon('users')}<span><b>Партнёры</b><small>Партнёрская программа</small></span>${icon('arrow')}</button><button data-nav="banners">${icon('image')}<span><b>Получить баннер</b><small>Материалы для продвижения</small></span>${icon('arrow')}</button><button data-nav="contact">${icon('shield')}<span><b>Проверить контакт</b><small>Telegram или email</small></span>${icon('arrow')}</button><button data-nav="blocked">${icon('shield')}<span><b>Заблокированный контакт</b><small>Проверка блок-листа</small></span>${icon('arrow')}</button><hr><button data-nav="faq">${icon('help')}<span><b>Вопросы и ответы</b><small>FAQ для агентов и партнёров</small></span>${icon('arrow')}</button><button data-nav="support">${icon('message')}<span><b>Поддержка</b><small>Связаться с менеджером</small></span>${icon('arrow')}</button></section></div>`}
+export function home(account){
+  const a=account?.application;
+  const status=a?(info[a.status]||info.reviewing):null;
+  return `<div class="view melbet-dashboard">
+    <section class="kinetic-hero">
+      <div class="hero-orbit" aria-hidden="true"></div>
+      <div class="hero-brand"><b>MEL</b><strong>BET</strong><span>PARTNERS HUB</span></div>
+      <div class="hero-badge">AGENT & AFFILIATE NETWORK</div>
+      <h1>Ваш центр<br><em>партнёрского роста</em></h1>
+      <p>Заявки, материалы, проверки и поддержка — в одном рабочем пространстве.</p>
+      <button class="hero-action" data-nav="${a?'profile':'agents'}"><span>${a?'Открыть кабинет':'Начать работу'}</span>${icon('arrow')}</button>
+    </section>
+    ${status?`<button class="application-status compact-status" data-nav="check"><span>${status[0]}</span><div><b>${status[1]}</b><small>Посмотреть статус заявки</small></div>${icon('arrow')}</button>`:''}
+    <div class="dashboard-heading"><div><span>БЫСТРЫЙ ДОСТУП</span><h2>Рабочая панель</h2></div><small>7 сервисов</small></div>
+    <section class="action-deck">
+      <button class="deck-card deck-agent" data-nav="agents"><i>${icon('briefcase')}</i><span><small>АГЕНТАМ</small><b>Стать агентом</b><em>Заявка и кабинет</em></span>${icon('arrow')}</button>
+      <button class="deck-card deck-partner" data-nav="partners"><i>${icon('users')}</i><span><small>ПАРТНЁРАМ</small><b>Партнёрская программа</b></span>${icon('arrow')}</button>
+      <button class="deck-card deck-media" data-nav="banners"><i>${icon('image')}</i><span><small>МАТЕРИАЛЫ</small><b>Получить баннер</b><em>Готовые креативы</em></span>${icon('arrow')}</button>
+      <button class="deck-card deck-contact" data-nav="contact"><i>${icon('search')}</i><span><b>Проверить<br>контакт</b></span></button>
+      <button class="deck-card deck-blocked" data-nav="blocked"><i>${icon('shield')}</i><span><b>Блок-лист</b><em>Проверка ID</em></span></button>
+    </section>
+    <section class="utility-strip">
+      <button data-nav="faq">${icon('help')}<span><b>FAQ</b><small>Ответы на вопросы</small></span>${icon('arrow')}</button>
+      <button data-nav="support">${icon('message')}<span><b>Поддержка</b><small>Связаться с нами</small></span>${icon('arrow')}</button>
+    </section>
+  </div>`
+}
 export function agents(account){const a=account?.application;return `<div class="view">${pageHead('Агенты','MELBET Partners')}${a?`<section class="status-card"><b>${(info[a.status]||info.reviewing)[0]}</b><h2>${(info[a.status]||info.reviewing)[1]}</h2><p>${(info[a.status]||info.reviewing)[2]}</p>${button('Открыть кабинет','data-nav="profile"')}</section>`:`<section class="choice-stack"><button class="featured" data-nav="apply">${icon('briefcase')}<span><b>Стать агентом</b><small>Подать заявку на регистрацию</small></span>${icon('arrow')}</button><button data-nav="check">${icon('user')}<span><b>Я уже агент</b><small>Проверить статус по Telegram ID</small></span>${icon('arrow')}</button></section>`}</div>`}
 export const partners=()=>`<div class="view">${pageHead('Партнёры','MELBET Partners')}<section class="choice-stack"><button class="featured" data-nav="support">${icon('users')}<span><b>Стать партнёром</b><small>Связаться с менеджером программы</small></span>${icon('arrow')}</button><button data-nav="profile">${icon('user')}<span><b>Я уже партнёр</b><small>Открыть личный кабинет</small></span>${icon('arrow')}</button></section></div>`;
 export const banners=()=>`<div class="view">${pageHead('Получить баннер','Материалы для продвижения')}<div class="category-tabs"><button class="active">Все</button><button>Telegram</button><button>Stories</button><button>Posts</button></div><section class="banner-empty">${icon('image')}<h2>Материалы готовятся</h2><p>Опубликованные администратором баннеры появятся здесь без обновления приложения.</p></section></div>`;
