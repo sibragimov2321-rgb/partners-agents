@@ -14,9 +14,11 @@ from aiogram.types import (
     Message,
     WebAppInfo,
 )
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from .storage import init_storage
+from .webapi import ApplicationIn, TicketIn, current_user, profile_payload, submit_application, submit_ticket
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.environ["BOT_TOKEN"]
@@ -40,6 +42,26 @@ async def index():
 @api.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@api.on_event("startup")
+async def startup() -> None:
+    init_storage()
+
+
+@api.get("/api/me")
+async def me(user: dict = Depends(current_user)):
+    return profile_payload(user)
+
+
+@api.post("/api/agent-applications")
+async def agent_application(payload: ApplicationIn, user: dict = Depends(current_user)):
+    return submit_application(user, payload)
+
+
+@api.post("/api/support-tickets")
+async def support_ticket(payload: TicketIn, user: dict = Depends(current_user)):
+    return submit_ticket(user, payload)
 
 
 def open_keyboard() -> InlineKeyboardMarkup:
