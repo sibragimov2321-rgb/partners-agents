@@ -51,6 +51,10 @@ class TicketIn(BaseModel):
     body: str = Field(min_length=2, max_length=5000)
 
 
+class ContactCheckIn(BaseModel):
+    query: str = Field(min_length=2, max_length=254)
+
+
 def submit_application(user: dict, payload: ApplicationIn) -> dict:
     with Session(engine) as session:
         application = session.scalar(select(AgentApplication).where(AgentApplication.telegram_id == int(user["id"])))
@@ -66,3 +70,14 @@ def submit_ticket(user: dict, payload: TicketIn) -> dict:
         ticket = SupportTicket(telegram_id=int(user["id"]), **payload.model_dump())
         session.add(ticket); session.commit(); session.refresh(ticket)
         return {"id": ticket.id, "status": ticket.status, "created_at": ticket.created_at.isoformat()}
+
+
+def check_contact(payload: ContactCheckIn, blocked_only: bool = False) -> dict:
+    query = payload.query.strip().lower().lstrip("@")
+    with Session(engine) as session:
+        application = session.scalar(select(AgentApplication).where(AgentApplication.email.ilike(query)))
+        if not application and query.isdigit():
+            application = session.scalar(select(AgentApplication).where(AgentApplication.telegram_id == int(query)))
+        if blocked_only:
+            return {"blocked": bool(application and application.status == "blocked")}
+        return {"registered": bool(application)}
