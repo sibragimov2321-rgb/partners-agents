@@ -31,3 +31,13 @@
 @media(max-width:360px){.language-trigger{width:53px}.app-header{padding-left:10px;padding-right:10px}.app-header>.portal-title b{font-size:12px}.app-header>.portal-title span{font-size:7px}}
 
 .language-menu{width:154px;max-height:min(390px,calc(100vh - 92px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(255,196,0,.35) transparent}.language-menu button{grid-template-columns:31px 1fr}.language-menu span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Main actions use one consistent horizontal row layout. */
+.action-deck{display:grid!important;grid-template-columns:1fr!important;grid-template-areas:none!important;gap:10px!important}
+.action-deck .deck-card{grid-area:auto!important;display:grid!important;grid-template-columns:40px minmax(0,1fr) 20px!important;align-items:center!important;justify-content:initial!important;min-height:74px!important;padding:12px 14px!important;border-radius:17px!important}
+.action-deck .deck-card>i{grid-column:1!important;grid-row:1!important;margin:0!important}
+.action-deck .deck-card>span{grid-column:2!important;grid-row:1!important;align-self:center!important;gap:3px!important;margin:0!important;padding-left:10px!important}
+.action-deck .deck-card>svg{position:static!important;grid-column:3!important;grid-row:1!important;width:17px!important;height:17px!important;margin-left:auto!important;color:#837b61!important}
+.action-deck .deck-card:not(:has(>svg)):after{content:"";grid-column:3;grid-row:1;width:8px;height:8px;margin-left:auto;border-top:2px solid #837b61;border-right:2px solid #837b61;transform:rotate(45deg)}
+.action-deck .deck-card b{font-size:14px!important;line-height:1.2!important}.action-deck .deck-card em{display:block!important;font-size:9px!important}.action-deck .deck-agent{min-height:78px!important}.action-deck .deck-agent:after{content:none!important}.action-deck .deck-agent>svg{color:rgba(26,19,0,.62)!important}.action-deck .deck-agent>span{margin:0!important}.action-deck .deck-agent b{font-size:16px!important}.action-deck .deck-partner>span,.action-deck .deck-media>span{margin:0!important}.action-deck .deck-partner>i,.action-deck .deck-media>i{width:36px!important;height:36px!important}
+@media(max-width:360px){.action-deck .deck-card{min-height:70px!important;padding:10px 12px!important}.action-deck .deck-card b{font-size:13px!important}}
