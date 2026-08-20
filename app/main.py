@@ -14,11 +14,33 @@ from aiogram.types import (
     Message,
     WebAppInfo,
 )
-from fastapi import Depends, FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, File, Request, UploadFile
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from .storage import init_storage
-from .webapi import ApplicationIn, ContactCheckIn, TicketIn, check_contact, check_manager, current_user, profile_payload, submit_application, submit_ticket
+from .webapi import (
+    AccountStartIn,
+    ApplicationDraftIn,
+    ApplicationIn,
+    ContactCheckIn,
+    ManagerActionIn,
+    TicketIn,
+    check_contact,
+    check_manager,
+    current_user,
+    load_document,
+    manager_application_action,
+    manager_applications,
+    mark_deposit,
+    profile_payload,
+    remove_document,
+    save_application_draft,
+    save_document,
+    start_account,
+    submit_application,
+    submit_profile,
+    submit_ticket,
+)
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.environ["BOT_TOKEN"]
@@ -57,6 +79,65 @@ async def me(user: dict = Depends(current_user)):
 @api.post("/api/agent-applications")
 async def agent_application(payload: ApplicationIn, user: dict = Depends(current_user)):
     return submit_application(user, payload)
+
+
+@api.post("/api/agent-onboarding/account")
+async def onboarding_account(payload: AccountStartIn, user: dict = Depends(current_user)):
+    return start_account(user, payload)
+
+
+@api.patch("/api/agent-onboarding/draft")
+async def onboarding_draft(payload: ApplicationDraftIn, user: dict = Depends(current_user)):
+    return save_application_draft(user, payload)
+
+
+@api.post("/api/agent-onboarding/deposit")
+async def onboarding_deposit(user: dict = Depends(current_user)):
+    return mark_deposit(user)
+
+
+@api.post("/api/agent-onboarding/submit")
+async def onboarding_submit(user: dict = Depends(current_user)):
+    return submit_profile(user)
+
+
+@api.post("/api/agent-documents/{kind}")
+async def upload_agent_document(kind: str, document: UploadFile = File(...), user: dict = Depends(current_user)):
+    data = await document.read(8 * 1024 * 1024 + 1)
+    return save_document(user, kind, document.filename or "document.jpg", document.content_type or "", data)
+
+
+@api.get("/api/agent-documents/{kind}")
+async def get_agent_document(kind: str, user: dict = Depends(current_user)):
+    data, mime_type, filename = load_document(user, kind)
+    return Response(data, media_type=mime_type, headers={
+        "Cache-Control": "no-store, private",
+        "Content-Disposition": f'inline; filename="{filename.replace(chr(34), "")}"',
+    })
+
+
+@api.delete("/api/agent-documents/{kind}")
+async def delete_agent_document(kind: str, user: dict = Depends(current_user)):
+    return remove_document(user, kind)
+
+
+@api.get("/api/manager/applications")
+async def get_manager_applications(user: dict = Depends(current_user)):
+    return manager_applications(user)
+
+
+@api.post("/api/manager/applications/{application_id}/action")
+async def act_on_application(application_id: int, payload: ManagerActionIn, user: dict = Depends(current_user)):
+    return manager_application_action(user, application_id, payload)
+
+
+@api.get("/api/manager/applications/{application_id}/documents/{kind}")
+async def get_manager_document(application_id: int, kind: str, user: dict = Depends(current_user)):
+    data, mime_type, filename = load_document(user, kind, application_id)
+    return Response(data, media_type=mime_type, headers={
+        "Cache-Control": "no-store, private",
+        "Content-Disposition": f'inline; filename="{filename.replace(chr(34), "")}"',
+    })
 
 
 @api.post("/api/support-tickets")
