@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import storage, webapi
-from app.storage import Base, TelegramUser
+from app.storage import Base, ManagerAccess, ManagerAccessAudit, TelegramUser
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +22,8 @@ def isolated_database(monkeypatch):
     monkeypatch.setattr(storage, "engine", test_engine)
     monkeypatch.setattr(webapi, "engine", test_engine)
     monkeypatch.setattr(webapi, "MANAGER_IDS", {"900"})
+    monkeypatch.setattr(webapi, "MANAGER_ID_LIST", ["900"])
+    monkeypatch.setattr(webapi, "SUPERADMIN_IDS", {"900"})
     yield test_engine
 
 
@@ -118,6 +120,32 @@ def test_only_manager_can_open_another_users_document():
     data, mime, _ = webapi.load_document(manager, "deposit", application["id"])
     assert data == PNG
     assert mime == "image/png"
+
+
+def test_only_owner_can_manage_manager_access(isolated_database):
+    owner = user(900)
+    new_manager = user(901)
+
+    granted = webapi.grant_manager_access(owner, webapi.ManagerAccessIn(telegram_id=901))
+    assert granted == {"telegram_id": 901, "active": True}
+    assert webapi.is_manager_id(901) is True
+
+    with pytest.raises(HTTPException) as error:
+        webapi.grant_manager_access(new_manager, webapi.ManagerAccessIn(telegram_id=902))
+    assert error.value.status_code == 403
+
+    managers = webapi.list_manager_access(owner)
+    assert any(item["telegram_id"] == 901 and item["active"] for item in managers)
+
+    revoked = webapi.revoke_manager_access(owner, 901)
+    assert revoked == {"telegram_id": 901, "active": False}
+    assert webapi.is_manager_id(901) is False
+
+    with Session(isolated_database) as session:
+        access = session.scalar(select(ManagerAccess).where(ManagerAccess.telegram_id == 901))
+        audit = session.scalars(select(ManagerAccessAudit).where(ManagerAccessAudit.target_telegram_id == 901)).all()
+        assert access.active is False
+        assert [item.action for item in audit] == ["granted", "revoked"]
 
 
 def test_legacy_database_gets_new_columns(monkeypatch, tmp_path):

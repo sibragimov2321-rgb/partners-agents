@@ -14,7 +14,7 @@ from aiogram.types import (
     Message,
     WebAppInfo,
 )
-from fastapi import Depends, FastAPI, File, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from .storage import init_storage
@@ -24,16 +24,20 @@ from .webapi import (
     ApplicationIn,
     ContactCheckIn,
     ManagerActionIn,
+    ManagerAccessIn,
     TicketIn,
     check_contact,
     check_manager,
     current_user,
     load_document,
+    list_manager_access,
+    grant_manager_access,
     manager_application_action,
     manager_applications,
     mark_deposit,
     profile_payload,
     remove_document,
+    revoke_manager_access,
     save_application_draft,
     save_document,
     start_account,
@@ -140,6 +144,21 @@ async def get_manager_document(application_id: int, kind: str, user: dict = Depe
     })
 
 
+@api.get("/api/superadmin/managers")
+async def get_managers(user: dict = Depends(current_user)):
+    return list_manager_access(user)
+
+
+@api.post("/api/superadmin/managers")
+async def add_manager(payload: ManagerAccessIn, user: dict = Depends(current_user)):
+    return grant_manager_access(user, payload)
+
+
+@api.delete("/api/superadmin/managers/{telegram_id}")
+async def delete_manager(telegram_id: int, user: dict = Depends(current_user)):
+    return revoke_manager_access(user, telegram_id)
+
+
 @api.post("/api/support-tickets")
 async def support_ticket(payload: TicketIn, user: dict = Depends(current_user)):
     return submit_ticket(user, payload)
@@ -197,6 +216,59 @@ async def start(message: Message):
 @dp.message(Command("menu"))
 async def menu(message: Message):
     await send_portal(message)
+
+
+def telegram_message_user(message: Message) -> dict:
+    sender = message.from_user
+    return {"id": sender.id if sender else 0}
+
+
+def command_telegram_id(message: Message) -> int | None:
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) != 2 or not parts[1].strip().isdigit():
+        return None
+    return int(parts[1].strip())
+
+
+@dp.message(Command("add_manager"))
+async def add_manager_command(message: Message):
+    telegram_id = command_telegram_id(message)
+    if telegram_id is None:
+        await message.answer("Используйте команду: /add_manager TELEGRAM_ID")
+        return
+    try:
+        grant_manager_access(telegram_message_user(message), ManagerAccessIn(telegram_id=telegram_id))
+        await message.answer(f"✅ Менеджер {telegram_id} добавлен.")
+    except HTTPException as error:
+        await message.answer(f"⛔ {error.detail}")
+
+
+@dp.message(Command("remove_manager"))
+async def remove_manager_command(message: Message):
+    telegram_id = command_telegram_id(message)
+    if telegram_id is None:
+        await message.answer("Используйте команду: /remove_manager TELEGRAM_ID")
+        return
+    try:
+        revoke_manager_access(telegram_message_user(message), telegram_id)
+        await message.answer(f"✅ Доступ менеджера {telegram_id} удалён.")
+    except HTTPException as error:
+        await message.answer(f"⛔ {error.detail}")
+
+
+@dp.message(Command("managers"))
+async def managers_command(message: Message):
+    try:
+        managers = list_manager_access(telegram_message_user(message))
+        active = [item for item in managers if item["active"]]
+        rows = [
+            f"• {item['first_name'] or item['username'] or 'Менеджер'} — {item['telegram_id']}"
+            + (" (владелец)" if item["is_superadmin"] else "")
+            for item in active
+        ]
+        await message.answer("Менеджеры:\n" + ("\n".join(rows) if rows else "список пуст"))
+    except HTTPException as error:
+        await message.answer(f"⛔ {error.detail}")
 
 
 @dp.message(Command("help"))

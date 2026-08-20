@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, create_engine, inspect, select, text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, create_engine, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 
@@ -77,6 +77,25 @@ class ApplicationAuditLog(Base):
     actor_telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
     action: Mapped[str] = mapped_column(String(80))
     details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ManagerAccess(Base):
+    __tablename__ = "manager_access"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    granted_by: Mapped[int] = mapped_column(BigInteger, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ManagerAccessAudit(Base):
+    __tablename__ = "manager_access_audit"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    target_telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    action: Mapped[str] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

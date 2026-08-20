@@ -1,7 +1,7 @@
 import { branding } from './config/branding.js?v=20260819-6';
 import { esc, icon } from './ui.js?v=20260819-6';
-import * as screens from './screens.js?v=20260819-6';
-import { renderManager, renderOnboarding } from './onboarding.js?v=20260820-1';
+import * as screens from './screens.js?v=20260820-2';
+import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260820-2';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const supportsBack=Boolean(tg?.isVersionAtLeast?.('6.1'));
 const supportsHaptics=Boolean(tg?.isVersionAtLeast?.('6.1'));
@@ -22,12 +22,12 @@ const savedLanguage=localStorage.getItem('partners-language');
 const telegramLanguage=(tg?.initDataUnsafe?.user?.language_code||'ru').toLowerCase().split('-')[0];
 const supportedLanguages=new Set(languageOptions.map(item=>item[0]));
 const initialLanguage=supportedLanguages.has(savedLanguage)?savedLanguage:(supportedLanguages.has(telegramLanguage)?telegramLanguage:'ru');
-const state={view:'home',account:null,loading:true,lang:initialLanguage,form:JSON.parse(sessionStorage.getItem('agent-form')||'{}'),agentStep:Number(localStorage.getItem('agent-step')||0),managerApps:[],managerFilter:'all'};
+const state={view:'home',account:null,loading:true,lang:initialLanguage,form:JSON.parse(sessionStorage.getItem('agent-form')||'{}'),agentStep:Number(localStorage.getItem('agent-step')||0),managerApps:[],managerFilter:'all',managers:[]};
 const words=()=>languageCopy[state.lang]||languageCopy.ru;
 const api=(path,options={})=>{const isForm=options.body instanceof FormData;return fetch(path,{...options,headers:{...(!isForm?{'Content-Type':'application/json'}:{}),'X-Telegram-Init-Data':tg?.initData||'',...(options.headers||{})}})};
 function note(text){toast.textContent=text;toast.classList.add('show');clearTimeout(note.t);note.t=setTimeout(()=>toast.classList.remove('show'),2600)}
 function headerView(){const c=words(),selected=languageOptions.find(item=>item[0]===state.lang)||languageOptions[0];const options=languageOptions.map(([code,label,name])=>`<button class="${state.lang===code?'active':''}" data-language="${code}"><b>${label}</b><span>${name}</span></button>`).join('');header.innerHTML=`<div class="language-picker"><button class="language-trigger" data-language-toggle aria-label="Language">${icon('globe')}<b>${selected[1]}</b></button><div class="language-menu" hidden>${options}</div></div><div class="portal-title"><b><span class="brand-mel">MEL</span><span class="brand-bet">BET</span> PARTNERS</b><span>${c.subtitle}</span></div><button class="header-avatar" data-nav="profile">${esc((state.account?.telegram?.first_name||'P')[0])}</button>`}
-function render(){const c=words();const routes={home:()=>screens.home(state.account,state.lang),stats:()=>screens.stats(state.account,state.lang),profile:()=>screens.profile(state.account,state.lang),manager:()=>renderManager(state.managerApps,state.managerFilter),agents:()=>screens.agents(state.account,state.lang),partners:screens.partners,banners:screens.banners,agent_lookup:()=>screens.lookup('agent',state.lang),manager_lookup:()=>screens.lookup('manager',state.lang),faq:screens.faq,apply:()=>renderOnboarding(state.account,state.agentStep),check:()=>screens.check(state.account,state.lang),instructions:screens.instructions,support:()=>screens.support(state.lang),ticket:()=>screens.ticket(state.lang)};const nav=[['home',c.home,'home'],['stats',c.stats,'chart'],['profile',c.profile,'user']];headerView();content.innerHTML=state.loading?screens.loading():(routes[state.view]||routes.home)();bottomNav.innerHTML=nav.map(([v,l,i])=>`<button class="nav-item ${state.view===v?'active':''}" data-nav="${v}">${icon(i)}<span>${l}</span></button>`).join('');hydrateDocuments();if(supportsBack)state.view==='home'?tg.BackButton.hide():tg.BackButton.show()}
+function render(){const c=words();const routes={home:()=>screens.home(state.account,state.lang),stats:()=>screens.stats(state.account,state.lang),profile:()=>screens.profile(state.account,state.lang),manager:()=>renderManager(state.managerApps,state.managerFilter),managers:()=>renderManagerAccess(state.managers),agents:()=>screens.agents(state.account,state.lang),partners:screens.partners,banners:screens.banners,agent_lookup:()=>screens.lookup('agent',state.lang),manager_lookup:()=>screens.lookup('manager',state.lang),faq:screens.faq,apply:()=>renderOnboarding(state.account,state.agentStep),check:()=>screens.check(state.account,state.lang),instructions:screens.instructions,support:()=>screens.support(state.lang),ticket:()=>screens.ticket(state.lang)};const nav=[['home',c.home,'home'],['stats',c.stats,'chart'],['profile',c.profile,'user']];headerView();content.innerHTML=state.loading?screens.loading():(routes[state.view]||routes.home)();bottomNav.innerHTML=nav.map(([v,l,i])=>`<button class="nav-item ${state.view===v?'active':''}" data-nav="${v}">${icon(i)}<span>${l}</span></button>`).join('');hydrateDocuments();if(supportsBack)state.view==='home'?tg.BackButton.hide():tg.BackButton.show()}
 function go(view){state.view=view;if(supportsHaptics)tg.HapticFeedback.impactOccurred('light');render();scrollTo({top:0,behavior:'smooth'})}
 async function load(){try{const r=await api('/api/me');if(r.ok)state.account=await r.json()}catch{}finally{state.loading=false;render()}}
 async function readError(response){try{const data=await response.json();const detail=data.detail;return Array.isArray(detail)?detail.map(x=>x.msg).join(' · '):(detail||words().error)}catch{return words().error}}
@@ -47,6 +47,8 @@ document.addEventListener('click',async e=>{
   if(managerDocument){const response=await api(`/api/manager/applications/${managerDocument.dataset.applicationId}/documents/${managerDocument.dataset.managerDocument}`);if(!response.ok)return note(await readError(response));const url=URL.createObjectURL(await response.blob());window.open(url,'_blank');return}
   const managerFilter=e.target.closest('[data-manager-filter]');
   if(managerFilter){state.managerFilter=managerFilter.dataset.managerFilter;return render()}
+  const revokeManager=e.target.closest('[data-revoke-manager]');
+  if(revokeManager){revokeManager.disabled=true;const response=await api(`/api/superadmin/managers/${revokeManager.dataset.revokeManager}`,{method:'DELETE'});if(!response.ok)note(await readError(response));else{const list=await api('/api/superadmin/managers');state.managers=await list.json();note('Доступ менеджера удалён');render()}return}
   const flow=e.target.closest('[data-flow-action]');
   if(flow){
     if(flow.dataset.flowAction==='restart'){state.account.application.status='changes_requested';state.account.application.resume_state='account_review';return render()}
@@ -57,7 +59,7 @@ document.addEventListener('click',async e=>{
     flow.disabled=false;return;
   }
   const target=e.target.closest('[data-nav]');
-  if(target){if(target.dataset.nav==='manager'){const response=await api('/api/manager/applications');if(!response.ok)return note(await readError(response));state.managerApps=await response.json()}return go(target.dataset.nav)}
+  if(target){if(target.dataset.nav==='manager'){const response=await api('/api/manager/applications');if(!response.ok)return note(await readError(response));state.managerApps=await response.json()}if(target.dataset.nav==='managers'){const response=await api('/api/superadmin/managers');if(!response.ok)return note(await readError(response));state.managers=await response.json()}return go(target.dataset.nav)}
   const faq=e.target.closest('.faq-question');if(faq)faq.parentElement.classList.toggle('open');
 });
 
@@ -92,6 +94,9 @@ document.addEventListener('submit',async e=>{
     }
     if(type==='manager-action'){
       const actionValue=e.submitter?.value;if(!actionValue)return;const response=await api(`/api/manager/applications/${form.dataset.applicationId}/action`,{method:'POST',body:JSON.stringify({action:actionValue,comment:data.comment||null})});if(!response.ok)throw new Error(await readError(response));const list=await api('/api/manager/applications');state.managerApps=await list.json();note('Статус заявки обновлён');return render();
+    }
+    if(type==='manager-access'){
+      const response=await api('/api/superadmin/managers',{method:'POST',body:JSON.stringify({telegram_id:Number(data.telegram_id)})});if(!response.ok)throw new Error(await readError(response));const list=await api('/api/superadmin/managers');state.managers=await list.json();form.reset();note('Менеджеру выдан доступ');return render();
     }
     const endpoint=type==='application'?'/api/agent-applications':'/api/support-tickets';const body=type==='application'?data:{subject:data.subject,category:data.category,body:data.body};const response=await api(endpoint,{method:'POST',body:JSON.stringify(body)});if(!response.ok)throw new Error(await readError(response));
     if(type==='application'){sessionStorage.removeItem('agent-form');state.form={};await refreshAccount();note(c.applicationSent);go('apply')}else{note(c.ticketSent);go('support')}

@@ -17,13 +17,23 @@ from .storage import (
     AgentApplication,
     AgentDocument,
     ApplicationAuditLog,
+    ManagerAccess,
+    ManagerAccessAudit,
     SupportTicket,
+    TelegramUser,
     engine,
     save_telegram_user,
 )
 
 TOKEN = os.environ["BOT_TOKEN"]
-MANAGER_IDS = {item.strip() for item in os.getenv("ADMIN_IDS", "").split(",") if item.strip()}
+MANAGER_ID_LIST = [item.strip() for item in os.getenv("ADMIN_IDS", "").split(",") if item.strip()]
+MANAGER_IDS = set(MANAGER_ID_LIST)
+OWNER_TELEGRAM_ID = os.getenv("OWNER_TELEGRAM_ID", "").strip()
+if not OWNER_TELEGRAM_ID:
+    # Backward-compatible fallback: accept only the first legacy superadmin ID.
+    legacy_superadmins = [item.strip() for item in os.getenv("SUPERADMIN_IDS", "").split(",") if item.strip()]
+    OWNER_TELEGRAM_ID = legacy_superadmins[0] if legacy_superadmins else (MANAGER_ID_LIST[0] if MANAGER_ID_LIST else "")
+SUPERADMIN_IDS = {OWNER_TELEGRAM_ID} if OWNER_TELEGRAM_ID else set()
 SUPPORT_USERNAME = os.getenv("SUPPORT_USERNAME", "").strip().lower().lstrip("@")
 MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
 DOCUMENT_KINDS = {"deposit", "passport", "selfie"}
@@ -68,9 +78,30 @@ def current_user(x_telegram_init_data: str | None = Header(default=None)) -> dic
     return user
 
 
+def is_manager_id(telegram_id: int | str) -> bool:
+    value = str(telegram_id)
+    if value in MANAGER_IDS or value in SUPERADMIN_IDS:
+        return True
+    with Session(engine) as session:
+        return bool(session.scalar(select(ManagerAccess.id).where(
+            ManagerAccess.telegram_id == int(value),
+            ManagerAccess.active.is_(True),
+        )))
+
+
+def is_superadmin_id(telegram_id: int | str) -> bool:
+    return str(telegram_id) in SUPERADMIN_IDS
+
+
 def manager_user(user: dict) -> dict:
-    if str(user.get("id")) not in MANAGER_IDS:
+    if not is_manager_id(user.get("id")):
         raise HTTPException(403, "Недостаточно прав.")
+    return user
+
+
+def superadmin_user(user: dict) -> dict:
+    if not is_superadmin_id(user.get("id")):
+        raise HTTPException(403, "Только владелец может управлять менеджерами.")
     return user
 
 
@@ -120,7 +151,8 @@ def profile_payload(user: dict) -> dict:
         application = session.scalar(select(AgentApplication).where(AgentApplication.telegram_id == int(user["id"])))
         return {
             "telegram": user,
-            "is_manager": str(user["id"]) in MANAGER_IDS,
+            "is_manager": is_manager_id(user["id"]),
+            "is_superadmin": is_superadmin_id(user["id"]),
             "application": application_payload(application, session) if application else None,
         }
 
@@ -188,6 +220,70 @@ class TicketIn(BaseModel):
 
 class ContactCheckIn(BaseModel):
     query: str = Field(min_length=2, max_length=254)
+
+
+class ManagerAccessIn(BaseModel):
+    telegram_id: int = Field(gt=0)
+
+
+def list_manager_access(user: dict) -> list[dict]:
+    superadmin_user(user)
+    configured = {int(value) for value in MANAGER_IDS | SUPERADMIN_IDS if value.isdigit()}
+    with Session(engine) as session:
+        stored = session.scalars(select(ManagerAccess).order_by(ManagerAccess.created_at.desc())).all()
+        stored_by_id = {item.telegram_id: item for item in stored}
+        telegram_ids = configured | set(stored_by_id)
+        users = session.scalars(select(TelegramUser).where(TelegramUser.telegram_id.in_(telegram_ids))).all() if telegram_ids else []
+        users_by_id = {item.telegram_id: item for item in users}
+        result = []
+        for telegram_id in sorted(telegram_ids, key=lambda value: (value not in configured, value)):
+            profile = users_by_id.get(telegram_id)
+            access = stored_by_id.get(telegram_id)
+            result.append({
+                "telegram_id": telegram_id,
+                "username": profile.username if profile else None,
+                "first_name": profile.first_name if profile else None,
+                "active": True if telegram_id in configured else bool(access and access.active),
+                "source": "environment" if telegram_id in configured else "database",
+                "is_superadmin": str(telegram_id) in SUPERADMIN_IDS,
+                "created_at": access.created_at.isoformat() if access else None,
+            })
+        return result
+
+
+def grant_manager_access(user: dict, payload: ManagerAccessIn) -> dict:
+    superadmin_user(user)
+    target = int(payload.telegram_id)
+    if str(target) in SUPERADMIN_IDS:
+        raise HTTPException(409, "Этот пользователь уже является владельцем.")
+    with Session(engine) as session:
+        access = session.scalar(select(ManagerAccess).where(ManagerAccess.telegram_id == target))
+        if access is None:
+            access = ManagerAccess(telegram_id=target, granted_by=int(user["id"]), active=True)
+            session.add(access)
+        else:
+            access.active = True
+            access.granted_by = int(user["id"])
+            access.updated_at = datetime.utcnow()
+        session.add(ManagerAccessAudit(actor_telegram_id=int(user["id"]), target_telegram_id=target, action="granted"))
+        session.commit()
+    return {"telegram_id": target, "active": True}
+
+
+def revoke_manager_access(user: dict, telegram_id: int) -> dict:
+    superadmin_user(user)
+    target = int(telegram_id)
+    if str(target) in SUPERADMIN_IDS or str(target) in MANAGER_IDS:
+        raise HTTPException(409, "Доступ из Railway нельзя удалить внутри приложения.")
+    with Session(engine) as session:
+        access = session.scalar(select(ManagerAccess).where(ManagerAccess.telegram_id == target))
+        if not access:
+            raise HTTPException(404, "Менеджер не найден.")
+        access.active = False
+        access.updated_at = datetime.utcnow()
+        session.add(ManagerAccessAudit(actor_telegram_id=int(user["id"]), target_telegram_id=target, action="revoked"))
+        session.commit()
+    return {"telegram_id": target, "active": False}
 
 
 def start_account(user: dict, payload: AccountStartIn) -> dict:
@@ -429,5 +525,9 @@ def check_contact(payload: ContactCheckIn, blocked_only: bool = False) -> dict:
 
 def check_manager(payload: ContactCheckIn) -> dict:
     query = payload.query.strip().lower().lstrip("@")
-    verified = query in MANAGER_IDS or bool(SUPPORT_USERNAME and query == SUPPORT_USERNAME)
+    verified = (query.isdigit() and is_manager_id(query)) or bool(SUPPORT_USERNAME and query == SUPPORT_USERNAME)
+    if not verified and query:
+        with Session(engine) as session:
+            profile = session.scalar(select(TelegramUser).where(TelegramUser.username.ilike(query)))
+            verified = bool(profile and is_manager_id(profile.telegram_id))
     return {"verified": verified}
