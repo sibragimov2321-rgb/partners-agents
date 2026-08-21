@@ -207,7 +207,7 @@ def test_only_owner_can_manage_manager_access(isolated_database):
     owner = user(900)
     new_manager = user(901)
     granted = webapi.grant_manager_access(owner, webapi.ManagerAccessIn(telegram_id=901))
-    assert granted == {"telegram_id": 901, "active": True}
+    assert granted == {"telegram_id": 901, "username": None, "active": True}
     assert webapi.is_manager_id(901) is True
     with pytest.raises(HTTPException) as error:
         webapi.grant_manager_access(new_manager, webapi.ManagerAccessIn(telegram_id=902))
@@ -222,6 +222,21 @@ def test_only_owner_can_manage_manager_access(isolated_database):
         audit = session.scalars(select(ManagerAccessAudit).where(ManagerAccessAudit.target_telegram_id == 901)).all()
         assert access.active is False
         assert [item.action for item in audit] == ["granted", "revoked"]
+
+
+def test_owner_can_add_manager_by_saved_username():
+    owner = user(900)
+    candidate = user(902)
+    storage.save_telegram_user(candidate)
+
+    granted = webapi.grant_manager_access(owner, webapi.ManagerAccessIn(username="@user902"))
+    assert granted == {"telegram_id": 902, "username": "user902", "active": True}
+    assert webapi.is_manager_id(902) is True
+
+    with pytest.raises(HTTPException) as error:
+        webapi.grant_manager_access(owner, webapi.ManagerAccessIn(username="@unknown_manager"))
+    assert error.value.status_code == 404
+    assert "/start" in error.value.detail
 
 
 def test_legacy_database_gets_workflow_migration(monkeypatch, tmp_path):

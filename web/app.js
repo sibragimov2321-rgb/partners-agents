@@ -1,6 +1,6 @@
-import { esc, icon } from './ui.js?v=20260821-4';
-import * as screens from './screens.js?v=20260821-4';
-import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-4';
+import { esc, icon } from './ui.js?v=20260821-5';
+import * as screens from './screens.js?v=20260821-5';
+import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-5';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const supportsBack=Boolean(tg?.isVersionAtLeast?.('6.1'));
 const supportsHaptics=Boolean(tg?.isVersionAtLeast?.('6.1'));
@@ -128,7 +128,7 @@ document.addEventListener('submit',async e=>{
       const actionValue=e.submitter?.value;if(!actionValue)return;const response=await api(`/api/manager/applications/${form.dataset.applicationId}/action`,{method:'POST',body:JSON.stringify({action:actionValue,comment:data.comment||null})});if(!response.ok)throw new Error(await readError(response));const list=await api('/api/manager/applications');state.managerApps=await list.json();note('Статус заявки обновлён');return render();
     }
     if(type==='manager-access'){
-      const response=await api('/api/superadmin/managers',{method:'POST',body:JSON.stringify({telegram_id:Number(data.telegram_id)})});if(!response.ok)throw new Error(await readError(response));const list=await api('/api/superadmin/managers');state.managers=await list.json();form.reset();note('Менеджеру выдан доступ');return render();
+      const identifier=(data.manager_identifier||'').trim();const body=/^[0-9]+$/.test(identifier)?{telegram_id:Number(identifier)}:{username:identifier};const response=await api('/api/superadmin/managers',{method:'POST',body:JSON.stringify(body)});if(!response.ok)throw new Error(await readError(response));const list=await api('/api/superadmin/managers');state.managers=await list.json();form.reset();note('Менеджеру выдан доступ');return render();
     }
     if(type==='geo-setting'){
       const body={country:data.country,currency:data.currency,minimum_deposit:Number(data.minimum_deposit),active:data.active==='on'};const response=await api(`/api/superadmin/geo-settings/${form.dataset.geoCode}`,{method:'PUT',body:JSON.stringify(body)});if(!response.ok)throw new Error(await readError(response));const [publicResponse,managerResponse]=await Promise.all([api('/api/geo-settings'),api('/api/manager/geo-settings')]);state.geoSettings=publicResponse.ok?await publicResponse.json():state.geoSettings;state.managerGeoSettings=managerResponse.ok?await managerResponse.json():state.managerGeoSettings;note('GEO-настройки сохранены');return render();

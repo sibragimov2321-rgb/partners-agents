@@ -306,7 +306,18 @@ class ContactCheckIn(BaseModel):
 
 
 class ManagerAccessIn(BaseModel):
-    telegram_id: int = Field(gt=0)
+    telegram_id: int | None = Field(default=None, gt=0)
+    username: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def manager_identifier_required(self):
+        if self.username:
+            self.username = self.username.strip().lstrip("@").lower()
+            if not re.fullmatch(r"[a-z0-9_]{5,32}", self.username):
+                raise ValueError("Проверьте Telegram username.")
+        if not self.telegram_id and not self.username:
+            raise ValueError("Укажите Telegram ID или username.")
+        return self
 
 
 def list_geo_settings(user: dict, include_inactive: bool = False) -> list[dict]:
@@ -378,10 +389,22 @@ def list_manager_access(user: dict) -> list[dict]:
 
 def grant_manager_access(user: dict, payload: ManagerAccessIn) -> dict:
     superadmin_user(user)
-    target = int(payload.telegram_id)
-    if str(target) in SUPERADMIN_IDS:
-        raise HTTPException(409, "Этот пользователь уже является владельцем.")
     with Session(engine) as session:
+        profile = None
+        if payload.telegram_id:
+            target = int(payload.telegram_id)
+            profile = session.scalar(select(TelegramUser).where(TelegramUser.telegram_id == target))
+        else:
+            profile = session.scalar(select(TelegramUser).where(TelegramUser.username.ilike(payload.username)))
+            if profile is None:
+                raise HTTPException(
+                    404,
+                    f"Пользователь @{payload.username} не найден. Попросите его сначала отправить /start этому боту.",
+                )
+            target = int(profile.telegram_id)
+        resolved_username = profile.username if profile else payload.username
+        if str(target) in SUPERADMIN_IDS:
+            raise HTTPException(409, "Этот пользователь уже является владельцем.")
         access = session.scalar(select(ManagerAccess).where(ManagerAccess.telegram_id == target))
         if access is None:
             access = ManagerAccess(telegram_id=target, granted_by=int(user["id"]), active=True)
@@ -392,7 +415,7 @@ def grant_manager_access(user: dict, payload: ManagerAccessIn) -> dict:
             access.updated_at = datetime.utcnow()
         session.add(ManagerAccessAudit(actor_telegram_id=int(user["id"]), target_telegram_id=target, action="granted"))
         session.commit()
-    return {"telegram_id": target, "active": True}
+    return {"telegram_id": target, "username": resolved_username, "active": True}
 
 
 def revoke_manager_access(user: dict, telegram_id: int) -> dict:

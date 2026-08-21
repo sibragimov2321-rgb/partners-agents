@@ -22,7 +22,7 @@ class TelegramUser(Base):
     __tablename__ = "telegram_users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
-    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     first_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
@@ -189,6 +189,7 @@ def init_storage() -> None:
             connection.execute(text("ALTER TABLE agent_applications ALTER COLUMN telegram_id TYPE BIGINT"))
             connection.execute(text("ALTER TABLE support_tickets ALTER COLUMN telegram_id TYPE BIGINT"))
         connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_agent_applications_agent_id ON agent_applications (agent_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_users_username ON telegram_users (username)"))
         connection.execute(text("DELETE FROM agent_documents WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP"))
 
     defaults = [
@@ -244,15 +245,24 @@ def save_telegram_user(user: dict) -> TelegramUser:
     """Persist a verified Telegram user and refresh mutable profile fields."""
     telegram_id = int(user["id"])
     with Session(engine) as session:
+        username = (user.get("username") or "").strip().lstrip("@") or None
+        if username:
+            duplicates = session.scalars(select(TelegramUser).where(
+                TelegramUser.username.ilike(username),
+                TelegramUser.telegram_id != telegram_id,
+            )).all()
+            for duplicate in duplicates:
+                duplicate.username = None
         stored = session.scalar(select(TelegramUser).where(TelegramUser.telegram_id == telegram_id))
         if stored is None:
             stored = TelegramUser(telegram_id=telegram_id)
             session.add(stored)
-        stored.username = user.get("username")
+        stored.username = username
         stored.first_name = user.get("first_name")
         stored.last_name = user.get("last_name")
         stored.language_code = user.get("language_code")
-        stored.photo_url = user.get("photo_url")
+        if "photo_url" in user:
+            stored.photo_url = user.get("photo_url")
         stored.last_seen_at = datetime.utcnow()
         session.commit()
         session.refresh(stored)

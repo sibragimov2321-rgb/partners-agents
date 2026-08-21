@@ -17,7 +17,7 @@ from aiogram.types import (
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
-from .storage import init_storage
+from .storage import init_storage, save_telegram_user
 from .webapi import (
     AccountStartIn,
     ApplicationDraftIn,
@@ -218,6 +218,8 @@ async def configure_menu(bot: Bot, chat_id: int | None = None) -> None:
 
 
 async def send_portal(message: Message) -> None:
+    if message.from_user:
+        save_telegram_user(telegram_message_user(message))
     await configure_menu(message.bot, message.chat.id)
     await message.answer(
         "\U0001F680 Добро пожаловать в Partners Agent!\n\n"
@@ -239,7 +241,13 @@ async def menu(message: Message):
 
 def telegram_message_user(message: Message) -> dict:
     sender = message.from_user
-    return {"id": sender.id if sender else 0}
+    return {
+        "id": sender.id if sender else 0,
+        "username": sender.username if sender else None,
+        "first_name": sender.first_name if sender else None,
+        "last_name": sender.last_name if sender else None,
+        "language_code": sender.language_code if sender else None,
+    }
 
 
 def command_telegram_id(message: Message) -> int | None:
@@ -251,15 +259,20 @@ def command_telegram_id(message: Message) -> int | None:
 
 @dp.message(Command("add_manager"))
 async def add_manager_command(message: Message):
-    telegram_id = command_telegram_id(message)
-    if telegram_id is None:
-        await message.answer("Используйте команду: /add_manager TELEGRAM_ID")
+    parts = (message.text or "").split(maxsplit=1)
+    identifier = parts[1].strip() if len(parts) == 2 else ""
+    if not identifier:
+        await message.answer("Используйте: /add_manager @username или /add_manager TELEGRAM_ID")
         return
     try:
-        grant_manager_access(telegram_message_user(message), ManagerAccessIn(telegram_id=telegram_id))
-        await message.answer(f"✅ Менеджер {telegram_id} добавлен.")
+        payload = ManagerAccessIn(telegram_id=int(identifier)) if identifier.isdigit() else ManagerAccessIn(username=identifier)
+        result = grant_manager_access(telegram_message_user(message), payload)
+        label = f"@{result['username']}" if result.get("username") else str(result["telegram_id"])
+        await message.answer(f"✅ Менеджер {label} добавлен.")
     except HTTPException as error:
         await message.answer(f"⛔ {error.detail}")
+    except ValueError:
+        await message.answer("⛔ Проверьте username или Telegram ID.")
 
 
 @dp.message(Command("remove_manager"))
