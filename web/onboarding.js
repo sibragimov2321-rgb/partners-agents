@@ -1,4 +1,4 @@
-import { esc, icon, pageHead } from './ui.js?v=20260821-2';
+import { esc, icon, pageHead } from './ui.js?v=20260821-4';
 
 const e = value => esc(value ?? '');
 const action = (label, attrs = '', kind = 'primary') => `<button class="app-btn ${kind}" ${attrs}>${label}</button>`;
@@ -37,33 +37,42 @@ function countryControl(value = '', geoSettings = []) {
 }
 
 function infoScreen(hasApplication = false) {
-  const benefits = [
-    ['users', 'Работа с игроками', 'Помогайте игрокам с пополнением и выводом средств и будьте связующим звеном с сервисом.'],
-    ['briefcase', 'Агентский аккаунт', 'После одобрения вы получите рабочий аккаунт и необходимые инструменты.'],
-    ['message', 'Поддержка менеджера', 'Закреплённый менеджер поможет с запуском и дальнейшей работой.'],
-    ['chart', 'Статистика', 'Основные показатели работы доступны в личном кабинете агента.'],
-    ['shield', 'Безопасная проверка', 'Перед началом работы данные каждого агента проверяются менеджером.'],
+  const registrationAction = hasApplication ? 'data-show-application' : 'data-start-registration';
+  const programBenefits = [
+    ['briefcase', 'Агентский аккаунт'], ['bolt', 'Личный промокод'],
+    ['wallet', '8% с пополнений'], ['chart', '2% с выводов'],
+    ['message', 'Telegram-боты'], ['users', 'Рабочие инструменты'],
+    ['shield', 'Личный Agent ID'], ['user', 'Поддержка менеджера'],
+    ['chart', 'Статистика работы'], ['check', 'Статус проверенного агента'],
   ];
   const steps = [
-    ['Создайте аккаунт', 'Зарегистрируйте аккаунт и подготовьте основные данные.'],
-    ['Подтвердите контакты', 'Укажите актуальный телефон, Telegram и электронную почту.'],
-    ['Отправьте заявку', 'Заполните анкету на получение статуса агента.'],
-    ['Пройдите проверку', 'Менеджер проверит данные и при необходимости задаст вопросы.'],
-    ['Пополните агентский аккаунт', 'Сумма определяется настройками выбранной страны / GEO.'],
-    ['Подтвердите данные', 'На отдельном этапе загрузите документ и селфи с документом.'],
-    ['Получите статус агента', 'После финальной проверки менеджер активирует профиль.'],
+    ['Создайте аккаунт', 'Зарегистрируйтесь и заполните основные данные.'],
+    ['Заполните заявку', 'Укажите контакты, страну, город и информацию о планируемой работе.'],
+    ['Пройдите проверку', 'Менеджер проверит предоставленную информацию.'],
+    ['Внесите стартовый депозит', 'После предварительного одобрения внесите сумму согласно условиям вашего GEO.'],
+    ['Подтвердите личность', 'Предоставьте документы только на открытом менеджером этапе.'],
+    ['Получите статус агента', 'Получите Agent ID, промокод и доступ к агентским инструментам.'],
   ];
-  const requirements = ['Актуальный номер телефона и email','Заполненные реальные личные данные','Подтверждённый аккаунт','Проверка менеджером','Необходимые документы','Стартовый баланс по условиям GEO','Реальное место ведения деятельности','Соблюдение правил программы'];
-  const prepare = ['Имя и фамилия','Telegram username','Номер телефона и email','Страна и город','Название кассы / точки, если имеется','Местоположение работы','Предыдущий опыт','Источник знакомства с программой','Документ и селфи с документом — только позднее','Подтверждение депозита — после предварительного одобрения'];
+  const prepare = ['Имя и фамилия','Страна','Город','Telegram','Номер телефона','Email','Место работы','Название кассы / точки','Информация об опыте','Документы — на этапе проверки'];
   return `<div class="view onboarding-view agent-intro-view">
-    ${pageHead('Стать агентом', 'Официальная регистрация')}
-    <section class="agent-intro-hero"><div class="intro-orbit" aria-hidden="true"><i></i><b>PA</b></div><span>PARTNERS AGENT NETWORK</span><h1>Начните работать<br><em>с игроками</em></h1><p>Получите доступ к агентской системе после проверки вашей заявки.</p></section>
-    <div class="section-title"><span>ВОЗМОЖНОСТИ</span><h2>Что получает агент</h2></div>
-    <section class="benefit-grid">${benefits.map(([glyph,title,text]) => `<article><i>${icon(glyph)}</i><div><h3>${title}</h3><p>${text}</p></div></article>`).join('')}</section>
-    <section class="process-card" id="agent-process"><div class="section-title"><span>ПРОЦЕСС</span><h2>Как начать работу</h2></div><div class="process-timeline">${steps.map(([title,text],index) => `<article><i>${index + 1}</i><div><h3>${title}</h3><p>${text}</p></div></article>`).join('')}</div></section>
-    <section class="info-accordion" id="agent-requirements"><details open><summary><span>${icon('shield')}<b>Условия и требования</b></span><i>+</i></summary><div class="accordion-body"><ul class="check-list">${requirements.map(item => `<li>${icon('check')}<span>${item}</span></li>`).join('')}</ul><p class="truth-warning"><b>Важно:</b> предоставляйте только достоверную информацию. Несоответствие данных может стать причиной отклонения заявки.</p></div></details></section>
-    <section class="info-accordion"><details><summary><span>${icon('briefcase')}<b>Что понадобится для проверки</b></span><i>+</i></summary><div class="accordion-body"><ul class="prepare-list">${prepare.map(item => `<li>${item}</li>`).join('')}</ul><p class="privacy-note">Документы не запрашиваются на первом экране и станут доступны только после разрешения менеджера.</p></div></details></section>
-    <section class="intro-actions">${action(hasApplication ? 'Моя заявка' : 'Начать регистрацию', hasApplication ? 'data-show-application' : 'data-start-registration')}<div>${action('Условия и требования', 'data-scroll-to="agent-requirements"', 'secondary')}${action('Как работает агент', 'data-scroll-to="agent-process"', 'secondary')}</div>${action('Связаться с менеджером', 'data-nav="support"', 'ghost')}</section>
+    ${pageHead('Стать агентом', 'Возможности и регистрация')}
+    <section class="agent-intro-hero sales-section"><div class="intro-orbit" aria-hidden="true"><i></i><b>PA</b></div><span>PARTNERS AGENT NETWORK</span><h1>Станьте <em>агентом</em></h1><p>Работайте с игроками, получайте доход с операций и развивайте собственную базу игроков вместе с Partners Agent.</p><div class="hero-actions">${action(hasApplication ? 'Моя заявка' : 'Стать агентом', registrationAction)}${action('Как это работает','data-scroll-to="agent-process"','secondary')}</div></section>
+
+    <section class="sales-section rewards-section"><div class="section-title"><span>ВАШИ ВОЗМОЖНОСТИ</span><h2>Что вы получаете как агент</h2></div><p class="section-lead">После подтверждения агент получает инструменты для работы с игроками и возможность зарабатывать на их операциях.</p><div class="rate-grid"><article class="rate-card deposit-rate"><strong>8%</strong><span>С депозитов игроков</span><p>Получайте 8% за операции пополнения средств игроков, которые проходят через вас.</p></article><article class="rate-card withdraw-rate"><strong>2%</strong><span>С выводов игроков</span><p>Получайте 2% за операции вывода средств игроков, которые обслуживаются через вас.</p></article></div></section>
+
+    <section class="promo-card sales-section"><i>${icon('bolt')}</i><div><span>ПЕРСОНАЛЬНЫЙ ИНСТРУМЕНТ</span><h2>Личный промокод</h2><p>После активации агент получает персональный промокод для привлечения и регистрации своих игроков.</p><div class="promo-demo"><code>YOURCODE</code><button type="button" disabled aria-label="Демонстрация копирования">${icon('copy')}</button></div><small>Демонстрационный код. Настоящий промокод появится после активации.</small></div></section>
+
+    <section class="tools-card sales-section"><div class="tools-visual"><i>${icon('message')}</i><b>BOT</b><span></span></div><div class="section-title"><span>ИНСТРУМЕНТЫ ДЛЯ РАБОТЫ</span><h2>Боты для агентов</h2></div><p>Мы предоставляем готовые Telegram-боты и инструменты, которые помогают работать с игроками и упрощают ежедневную работу агента.</p><div class="tool-tags"><span>${icon('message')} Telegram Bot</span><span>${icon('users')} Работа с игроками</span><span>${icon('wallet')} Пополнение / вывод</span><span>${icon('shield')} Поддержка</span></div></section>
+
+    <section class="earnings-section sales-section"><div class="section-title"><span>ПОНЯТНЫЙ РАСЧЁТ</span><h2>Как вы зарабатываете</h2></div><div class="calculation-grid"><article><span>ПОПОЛНЕНИЕ</span><p>Игрок пополняет</p><b>$1 000</b><div><small>Доход агента</small><strong>8% = $80</strong></div></article><article><span>ВЫВОД</span><p>Игрок выводит</p><b>$1 000</b><div><small>Доход агента</small><strong>2% = $20</strong></div></article></div><p class="income-note">Чем больше операций проходит через агента, тем выше потенциальный доход. Расчёт приведён как пример и не является гарантией заработка.</p></section>
+
+    <section class="program-section sales-section"><div class="section-title"><span>ПОЛНЫЙ НАБОР</span><h2>Агент получает</h2></div><div class="program-benefit-grid">${programBenefits.map(([glyph,title]) => `<article><i>${icon(glyph)}</i><span>${title}</span></article>`).join('')}</div></section>
+
+    <section class="process-card sales-section" id="agent-process"><div class="section-title"><span>6 ШАГОВ</span><h2>Как стать агентом</h2></div><div class="process-timeline numbered">${steps.map(([title,text],index) => `<article><i>${String(index + 1).padStart(2,'0')}</i><div><h3>${title}</h3><p>${text}</p></div></article>`).join('')}</div><p class="geo-note">Размер стартового депозита определяется настройками выбранной страны / GEO и будет показан после предварительного одобрения.</p></section>
+
+    <section class="prepare-card sales-section"><div class="section-title"><span>ПОДГОТОВЬТЕ ЗАРАНЕЕ</span><h2>Что понадобится для регистрации</h2></div><div class="prepare-grid">${prepare.map(item => `<span>${icon('check')} ${item}</span>`).join('')}</div><p class="privacy-note">Документы не нужно загружать сразу — этот этап откроется только после решения менеджера.</p></section>
+
+    <section class="final-agent-cta sales-section"><span>ГОТОВЫ НАЧАТЬ?</span><h2>Готовы стать агентом?</h2><p>Подайте заявку и пройдите проверку, чтобы получить доступ к агентской программе Partners Agent.</p>${action(hasApplication ? 'Посмотреть мою заявку' : 'Начать регистрацию', registrationAction)}${action('Связаться с менеджером','data-nav="support"','secondary')}</section>
   </div>`;
 }
 

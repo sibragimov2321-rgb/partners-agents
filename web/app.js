@@ -1,6 +1,6 @@
-import { esc, icon } from './ui.js?v=20260821-3';
-import * as screens from './screens.js?v=20260821-3';
-import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-3';
+import { esc, icon } from './ui.js?v=20260821-4';
+import * as screens from './screens.js?v=20260821-4';
+import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-4';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const supportsBack=Boolean(tg?.isVersionAtLeast?.('6.1'));
 const supportsHaptics=Boolean(tg?.isVersionAtLeast?.('6.1'));
