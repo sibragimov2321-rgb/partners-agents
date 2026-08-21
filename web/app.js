@@ -1,7 +1,7 @@
 import { branding } from './config/branding.js?v=20260819-6';
 import { esc, icon } from './ui.js?v=20260819-6';
-import * as screens from './screens.js?v=20260820-2';
-import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260820-2';
+import * as screens from './screens.js?v=20260821-1';
+import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-1';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const supportsBack=Boolean(tg?.isVersionAtLeast?.('6.1'));
 const supportsHaptics=Boolean(tg?.isVersionAtLeast?.('6.1'));
@@ -26,11 +26,15 @@ const state={view:'home',account:null,loading:true,lang:initialLanguage,form:JSO
 const words=()=>languageCopy[state.lang]||languageCopy.ru;
 const api=(path,options={})=>{const isForm=options.body instanceof FormData;return fetch(path,{...options,headers:{...(!isForm?{'Content-Type':'application/json'}:{}),'X-Telegram-Init-Data':tg?.initData||'',...(options.headers||{})}})};
 function note(text){toast.textContent=text;toast.classList.add('show');clearTimeout(note.t);note.t=setTimeout(()=>toast.classList.remove('show'),2600)}
-function headerView(){const c=words(),selected=languageOptions.find(item=>item[0]===state.lang)||languageOptions[0];const options=languageOptions.map(([code,label,name])=>`<button class="${state.lang===code?'active':''}" data-language="${code}"><b>${label}</b><span>${name}</span></button>`).join('');header.innerHTML=`<div class="language-picker"><button class="language-trigger" data-language-toggle aria-label="Language">${icon('globe')}<b>${selected[1]}</b></button><div class="language-menu" hidden>${options}</div></div><div class="portal-title"><b><span class="brand-mel">MEL</span><span class="brand-bet">BET</span> PARTNERS</b><span>${c.subtitle}</span></div><button class="header-avatar" data-nav="profile">${esc((state.account?.telegram?.first_name||'P')[0])}</button>`}
+function headerView(){const c=words(),selected=languageOptions.find(item=>item[0]===state.lang)||languageOptions[0];const options=languageOptions.map(([code,label,name])=>`<button class="${state.lang===code?'active':''}" data-language="${code}"><b>${label}</b><span>${name}</span></button>`).join('');header.innerHTML=`<div class="language-picker"><button class="language-trigger" data-language-toggle aria-label="Language">${icon('globe')}<b>${selected[1]}</b></button><div class="language-menu" hidden>${options}</div></div><div class="portal-title"><b>Partners <span>Agent</span></b><small>${c.subtitle}</small></div><button class="header-avatar" data-nav="profile">${esc((state.account?.telegram?.first_name||'P')[0])}</button>`}
 function render(){const c=words();const routes={home:()=>screens.home(state.account,state.lang),stats:()=>screens.stats(state.account,state.lang),profile:()=>screens.profile(state.account,state.lang),manager:()=>renderManager(state.managerApps,state.managerFilter),managers:()=>renderManagerAccess(state.managers),agents:()=>screens.agents(state.account,state.lang),partners:screens.partners,banners:screens.banners,agent_lookup:()=>screens.lookup('agent',state.lang),manager_lookup:()=>screens.lookup('manager',state.lang),faq:screens.faq,apply:()=>renderOnboarding(state.account,state.agentStep),check:()=>screens.check(state.account,state.lang),instructions:screens.instructions,support:()=>screens.support(state.lang),ticket:()=>screens.ticket(state.lang)};const nav=[['home',c.home,'home'],['stats',c.stats,'chart'],['profile',c.profile,'user']];headerView();content.innerHTML=state.loading?screens.loading():(routes[state.view]||routes.home)();bottomNav.innerHTML=nav.map(([v,l,i])=>`<button class="nav-item ${state.view===v?'active':''}" data-nav="${v}">${icon(i)}<span>${l}</span></button>`).join('');hydrateDocuments();if(supportsBack)state.view==='home'?tg.BackButton.hide():tg.BackButton.show()}
 function go(view){state.view=view;if(supportsHaptics)tg.HapticFeedback.impactOccurred('light');render();scrollTo({top:0,behavior:'smooth'})}
 async function load(){try{const r=await api('/api/me');if(r.ok)state.account=await r.json()}catch{}finally{state.loading=false;render()}}
 async function readError(response){try{const data=await response.json();const detail=data.detail;return Array.isArray(detail)?detail.map(x=>x.msg).join(' · '):(detail||words().error)}catch{return words().error}}
+function agentLookupResult(result){
+  if(result.verified&&result.agent){const a=result.agent,date=a.connected_at?new Date(a.connected_at).toLocaleDateString(state.lang==='ru'?'ru-RU':'en-GB'):'—';return `<article class="verified-agent-card"><header><i>${icon('check')}</i><div><span>✓ VERIFIED AGENT</span><h3>${esc(a.name||'Agent')}</h3></div></header><dl><dt>Agent ID</dt><dd>${esc(a.agent_id)}</dd><dt>${state.lang==='ru'?'Страна':'Country'}</dt><dd>${esc(a.country||'—')}</dd><dt>${state.lang==='ru'?'Город':'City'}</dt><dd>${esc(a.city||'—')}</dd><dt>${state.lang==='ru'?'Статус':'Status'}</dt><dd>${state.lang==='ru'?'Подтверждён':'Verified'}</dd><dt>${state.lang==='ru'?'Подключён':'Connected'}</dt><dd>${date}</dd></dl></article>`}
+  return `<article class="unverified-agent-card"><i>${icon('shield')}</i><div><b>${state.lang==='ru'?'Агент не подтверждён':'Agent not verified'}</b><p>${state.lang==='ru'?'Не переводите деньги человеку, если он не подтверждён системой. Обратитесь в поддержку для дополнительной проверки.':'Do not transfer money unless the person is verified by the system. Contact support for an additional check.'}</p></div></article>`;
+}
 async function refreshAccount(){const response=await api('/api/me');if(response.ok)state.account=await response.json()}
 async function hydrateDocuments(){for(const image of content.querySelectorAll('[data-secure-doc]')){try{const response=await api(`/api/agent-documents/${image.dataset.secureDoc}`);if(response.ok)image.src=URL.createObjectURL(await response.blob())}catch{}}}
 document.addEventListener('click',async e=>{
@@ -64,7 +68,8 @@ document.addEventListener('click',async e=>{
 });
 
 document.addEventListener('change',async e=>{
-  if(e.target.name==='source'){const other=e.target.closest('form')?.querySelector('.source-other');if(other)other.hidden=e.target.value!=='other'}
+  if(e.target.name==='source'){const other=e.target.closest('form')?.querySelector('.source-other');if(other){other.hidden=e.target.value!=='other';const input=other.querySelector('input');if(input)input.required=e.target.value==='other'}}
+  if(e.target.name==='country'){const other=e.target.closest('form')?.querySelector('.country-other');if(other){other.hidden=e.target.value!=='__other__';const input=other.querySelector('input');if(input)input.required=e.target.value==='__other__'}}
   if(!e.target.matches('[data-doc-kind]'))return;
   const file=e.target.files?.[0];if(!file)return;
   const preview=content.querySelector(`[data-preview="${e.target.dataset.docKind}"]`);
@@ -83,13 +88,15 @@ document.addEventListener('submit',async e=>{
   try{
     if(type==='lookup'){
       const manager=form.dataset.check==='manager';const response=await api(manager?'/api/check-manager':'/api/check-contact',{method:'POST',body:JSON.stringify({query:data.query})});
-      if(!response.ok)throw new Error(await readError(response));const result=await response.json(),box=form.parentElement.querySelector('.lookup-result');box.hidden=false;box.innerHTML=manager?(result.verified?c.managerYes:c.managerNo):(result.registered?c.agentYes:c.agentNo);return;
+      if(!response.ok)throw new Error(await readError(response));const result=await response.json(),box=form.parentElement.querySelector('.lookup-result');box.hidden=false;box.innerHTML=manager?(result.verified?c.managerYes:c.managerNo):agentLookupResult(result);box.classList.toggle('detailed',!manager);return;
     }
     if(type==='account-start'){
       const body={account_identifier:data.account_identifier,phone:data.phone||null,email:data.email||null};const response=await api('/api/agent-onboarding/account',{method:'POST',body:JSON.stringify(body)});
       if(!response.ok)throw new Error(await readError(response));await refreshAccount();note('Аккаунт отправлен менеджеру');return render();
     }
     if(type==='agent-draft'){
+      if(data.country==='__other__'){data.country=(data.country_other||'').trim();if(!data.country)throw new Error('Введите название страны')}
+      delete data.country_other;
       const response=await api('/api/agent-onboarding/draft',{method:'PATCH',body:JSON.stringify(data)});if(!response.ok)throw new Error(await readError(response));await refreshAccount();state.agentStep=Number(form.dataset.next||0);localStorage.setItem('agent-step',state.agentStep);note('Данные сохранены');return render();
     }
     if(type==='manager-action'){

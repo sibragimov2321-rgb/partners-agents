@@ -1,4 +1,4 @@
-import { esc, icon, pageHead } from './ui.js?v=20260820-1';
+import { esc, icon, pageHead } from './ui.js?v=20260821-1';
 
 const steps = ['Аккаунт', 'Проверка', 'Депозит', 'Анкета', 'Одобрение'];
 const stepByStatus = {
@@ -14,6 +14,19 @@ const stepByStatus = {
 };
 const e = value => esc(value || '');
 const action = (label, attrs = '', kind = 'primary') => `<button class="app-btn ${kind}" ${attrs}>${label}</button>`;
+const countryGroups = [
+  ['Основные страны', [['Кыргызстан','🇰🇬'],['Узбекистан','🇺🇿'],['Казахстан','🇰🇿'],['Таджикистан','🇹🇯'],['Туркменистан','🇹🇲'],['Азербайджан','🇦🇿'],['Турция','🇹🇷'],['Россия','🇷🇺']]],
+  ['Кавказ и СНГ', [['Армения','🇦🇲'],['Беларусь','🇧🇾'],['Грузия','🇬🇪'],['Молдова','🇲🇩'],['Украина','🇺🇦']]],
+  ['Другие страны Азии', [['Афганистан','🇦🇫'],['Бангладеш','🇧🇩'],['Бахрейн','🇧🇭'],['Бруней','🇧🇳'],['Бутан','🇧🇹'],['Вьетнам','🇻🇳'],['Израиль','🇮🇱'],['Индия','🇮🇳'],['Индонезия','🇮🇩'],['Иордания','🇯🇴'],['Ирак','🇮🇶'],['Иран','🇮🇷'],['Йемен','🇾🇪'],['Камбоджа','🇰🇭'],['Катар','🇶🇦'],['Кипр','🇨🇾'],['Китай','🇨🇳'],['Кувейт','🇰🇼'],['Лаос','🇱🇦'],['Ливан','🇱🇧'],['Малайзия','🇲🇾'],['Мальдивы','🇲🇻'],['Монголия','🇲🇳'],['Мьянма','🇲🇲'],['Непал','🇳🇵'],['ОАЭ','🇦🇪'],['Оман','🇴🇲'],['Пакистан','🇵🇰'],['Палестина','🇵🇸'],['Саудовская Аравия','🇸🇦'],['Северная Корея','🇰🇵'],['Сингапур','🇸🇬'],['Сирия','🇸🇾'],['Таиланд','🇹🇭'],['Тимор-Лесте','🇹🇱'],['Филиппины','🇵🇭'],['Шри-Ланка','🇱🇰'],['Южная Корея','🇰🇷'],['Япония','🇯🇵']]],
+];
+const countryNames = new Set(countryGroups.flatMap(([, countries]) => countries.map(([name]) => name)));
+
+function countryControl(value = '') {
+  const known = countryNames.has(value);
+  const selected = known ? value : value ? '__other__' : '';
+  const groups = countryGroups.map(([label, countries]) => `<optgroup label="${label}">${countries.map(([name, flag]) => `<option value="${name}" ${selected === name ? 'selected' : ''}>${flag} ${name}</option>`).join('')}</optgroup>`).join('');
+  return `<label class="field"><span>Страна *</span><select name="country" required><option value="">Выберите страну</option>${groups}<option value="__other__" ${selected === '__other__' ? 'selected' : ''}>🌍 Другая страна</option></select></label><label class="field country-other" ${selected === '__other__' ? '' : 'hidden'}><span>Название страны *</span><input name="country_other" value="${selected === '__other__' ? e(value) : ''}" ${selected === '__other__' ? 'required' : ''} placeholder="Введите страну"></label>`;
+}
 
 function progress(status) {
   const active = stepByStatus[status] ?? 0;
@@ -42,21 +55,19 @@ function field(label, name, value, type = 'text', placeholder = '') {
 }
 
 function wizard(application, step = 0) {
-  const screen = Math.max(0, Math.min(4, Number(step) || 0));
+  const screen = Math.max(0, Math.min(3, Number(step) || 0));
   const data = application || {};
   let body = '';
   if (screen === 0) {
-    body = `<form class="flow-card" data-form="agent-draft" data-next="1"><div class="form-kicker">ЛИЧНЫЕ ДАННЫЕ</div>${field('Имя и фамилия', 'name', data.name, 'text', 'Ваше имя')}${field('Номер телефона', 'phone', data.phone, 'tel', '+7 000 000 00 00')}${field('Email', 'email', data.email, 'email', 'name@example.com')}<label class="field"><span>Опыт работы</span><textarea name="experience" placeholder="Коротко расскажите об опыте">${e(data.experience)}</textarea></label>${action('Сохранить и продолжить', 'type="submit"')}</form>`;
+    body = `<form class="flow-card" data-form="agent-draft" data-next="1"><div class="form-kicker">ШАГ 1 · ОСНОВНАЯ ИНФОРМАЦИЯ</div>${field('Имя и фамилия', 'name', data.name, 'text', 'Ваше имя')}${field('Номер телефона', 'phone', data.phone, 'tel', '+7 000 000 00 00')}${field('Email', 'email', data.email, 'email', 'name@example.com')}<label class="field"><span>Опыт работы</span><textarea name="experience" placeholder="Коротко расскажите об опыте">${e(data.experience)}</textarea></label>${action('Сохранить и продолжить', 'type="submit"')}</form>`;
   } else if (screen === 1) {
-    body = `<section class="privacy-card">${icon('shield')}<div><b>Документы защищены</b><p>Загружайте только чёткие фотографии. Доступ к ним есть только у авторизованных менеджеров.</p></div></section><section class="secure-upload">${documentRow('passport', 'Фото паспорта', data.documents?.passport)}${documentRow('selfie', 'Селфи с паспортом', data.documents?.selfie)}</section><div class="flow-actions">${action('Назад', 'data-agent-step="0"', 'secondary')}${action('Продолжить', 'data-agent-step="2"')}</div>`;
+    body = `<form class="flow-card" data-form="agent-draft" data-next="2"><div class="form-kicker">ШАГ 2 · ИНФОРМАЦИЯ О КАССЕ</div>${field('Название кассы', 'cashdesk_name', data.cashdesk_name, 'text', 'Например, Cash Point')}${countryControl(data.country)}${field('Город', 'city', data.city, 'text', 'Город')}${field('Местоположение / район', 'location', data.location, 'text', 'Район или адрес')}<label class="field"><span>Откуда вы узнали о программе? *</span><select name="source" required><option value="">Выберите вариант</option>${[['telegram','Telegram'],['instagram','Instagram'],['facebook','Facebook'],['recommendation','По рекомендации'],['manager','Менеджер'],['other','Другой источник']].map(([value, label]) => `<option value="${value}" ${data.source === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field source-other" ${data.source === 'other' ? '' : 'hidden'}><span>Укажите источник *</span><input name="source_other" value="${e(data.source_other)}" ${data.source === 'other' ? 'required' : ''} placeholder="Напишите источник"></label><div class="flow-actions">${action('Назад', 'data-agent-step="0"', 'secondary')}${action('Сохранить и продолжить', 'type="submit"')}</div></form>`;
   } else if (screen === 2) {
-    body = `<form class="flow-card" data-form="agent-draft" data-next="3"><div class="form-kicker">БУДУЩАЯ КАССА</div>${field('Название кассы', 'cashdesk_name', data.cashdesk_name, 'text', 'Например, Cash Point')}${field('Страна', 'country', data.country, 'text', 'Страна')}${field('Город', 'city', data.city, 'text', 'Город')}${field('Местоположение / район', 'location', data.location, 'text', 'Район или адрес')}<div class="flow-actions">${action('Назад', 'data-agent-step="1"', 'secondary')}${action('Сохранить', 'type="submit"')}</div></form>`;
-  } else if (screen === 3) {
-    body = `<form class="flow-card" data-form="agent-draft" data-next="4"><div class="form-kicker">ИСТОЧНИК</div><label class="field"><span>Откуда вы узнали о программе? *</span><select name="source" required><option value="">Выберите вариант</option>${[['telegram','Telegram'],['instagram','Instagram'],['facebook','Facebook'],['recommendation','По рекомендации'],['manager','Менеджер'],['other','Другой источник']].map(([value, label]) => `<option value="${value}" ${data.source === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field source-other" ${data.source === 'other' ? '' : 'hidden'}><span>Укажите источник *</span><input name="source_other" value="${e(data.source_other)}" placeholder="Напишите источник"></label><div class="flow-actions">${action('Назад', 'data-agent-step="2"', 'secondary')}${action('Сохранить', 'type="submit"')}</div></form>`;
+    body = `<div class="form-kicker standalone">ШАГ 3 · ДОКУМЕНТЫ И ПОДТВЕРЖДЕНИЕ</div><section class="privacy-card">${icon('shield')}<div><b>Документы защищены</b><p>Загружайте только чёткие фотографии. Доступ к ним есть только у авторизованных менеджеров.</p></div></section><section class="secure-upload">${documentRow('passport', 'Фото паспорта', data.documents?.passport)}${documentRow('selfie', 'Селфи с паспортом', data.documents?.selfie)}</section><div class="flow-actions">${action('Назад', 'data-agent-step="1"', 'secondary')}${action('Продолжить', 'data-agent-step="3"')}</div>`;
   } else {
-    body = `<section class="review-grid"><article><span>КОНТАКТЫ</span><dl><dt>Имя</dt><dd>${e(data.name)}</dd><dt>Телефон</dt><dd>${e(data.phone)}</dd><dt>Email</dt><dd>${e(data.email)}</dd></dl></article><article><span>ДОКУМЕНТЫ</span><dl><dt>Паспорт</dt><dd>${data.documents?.passport ? '✅ Загружен' : '❌ Не загружен'}</dd><dt>Селфи</dt><dd>${data.documents?.selfie ? '✅ Загружено' : '❌ Не загружено'}</dd></dl></article><article><span>КАССА</span><dl><dt>Название</dt><dd>${e(data.cashdesk_name)}</dd><dt>Страна</dt><dd>${e(data.country)}</dd><dt>Город</dt><dd>${e(data.city)}</dd><dt>Место</dt><dd>${e(data.location)}</dd></dl></article><article><span>ИСТОЧНИК</span><p>${e(data.source === 'other' ? data.source_other : data.source)}</p></article></section><div class="flow-actions vertical">${action('Изменить данные', 'data-agent-step="0"', 'secondary')}${action('Отправить заявку', 'data-flow-action="submit"')}</div>`;
+    body = `<div class="form-kicker standalone">ШАГ 4 · ПРОВЕРКА ДАННЫХ</div><section class="review-grid"><article><span>КОНТАКТЫ</span><dl><dt>Имя</dt><dd>${e(data.name)}</dd><dt>Телефон</dt><dd>${e(data.phone)}</dd><dt>Email</dt><dd>${e(data.email)}</dd></dl></article><article><span>КАССА</span><dl><dt>Название</dt><dd>${e(data.cashdesk_name)}</dd><dt>Страна</dt><dd>${e(data.country)}</dd><dt>Город</dt><dd>${e(data.city)}</dd><dt>Место</dt><dd>${e(data.location)}</dd></dl></article><article><span>ДОКУМЕНТЫ</span><dl><dt>Паспорт</dt><dd>${data.documents?.passport ? '✅ Загружен' : '❌ Не загружен'}</dd><dt>Селфи</dt><dd>${data.documents?.selfie ? '✅ Загружено' : '❌ Не загружено'}</dd></dl></article><article><span>ИСТОЧНИК</span><p>${e(data.source === 'other' ? data.source_other : data.source)}</p></article></section><div class="flow-actions vertical">${action('Изменить данные', 'data-agent-step="0"', 'secondary')}${action('Отправить заявку', 'data-flow-action="submit"')}</div>`;
   }
-  return `<div class="view onboarding-view">${pageHead('Анкета агента', `Шаг ${screen + 1} из 5`)}${progress('profile_form')}${notice(application)}<div class="substep"><span style="width:${(screen + 1) * 20}%"></span></div>${body}</div>`;
+  return `<div class="view onboarding-view">${pageHead('Анкета агента', `Шаг ${screen + 1} из 4`)}${progress('profile_form')}${notice(application)}<div class="substep"><span style="width:${(screen + 1) * 25}%"></span></div>${body}</div>`;
 }
 
 function documentRow(kind, title, uploaded) {

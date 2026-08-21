@@ -68,10 +68,10 @@ def test_complete_agent_flow_and_resume():
 
     application = webapi.save_application_draft(applicant, webapi.ApplicationDraftIn(
         name="Test Agent", phone="+7 999 123-45-67", email="agent@example.com",
-        country="Kyrgyzstan", city="Bishkek", cashdesk_name="Agent Cash",
+        country="Кыргызстан", city="Бишкек", cashdesk_name="Agent Cash",
         location="Center", source="telegram", experience="Payments",
     ))
-    assert application["city"] == "Bishkek"
+    assert application["city"] == "Бишкек"
     webapi.save_document(applicant, "passport", "passport.jpg", "image/jpeg", JPEG)
     webapi.save_document(applicant, "selfie", "selfie.jpg", "image/jpeg", JPEG)
     application = webapi.submit_profile(applicant)
@@ -87,6 +87,12 @@ def test_complete_agent_flow_and_resume():
     application = webapi.manager_application_action(manager, application["id"], webapi.ManagerActionIn(action="activate"))
     assert application["status"] == "active_agent"
     assert webapi.profile_payload(applicant)["application"]["location"] == "Central district"
+    verification = webapi.check_contact(webapi.ContactCheckIn(query="agent@example.com"))
+    assert verification["verified"] is True
+    assert verification["agent"]["agent_id"].startswith("PA-")
+    assert verification["agent"]["country"] == "Кыргызстан"
+    assert "email" not in verification["agent"]
+    assert "phone" not in verification["agent"]
 
 
 def test_validation_and_required_documents():

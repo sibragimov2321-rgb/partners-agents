@@ -20,23 +20,24 @@ export function home(account,lang='ru'){
   const c=text(lang),info=statuses(lang);
   const a=account?.application;
   const status=a?(info[a.status]||info.reviewing):null;
-  return `<div class="view melbet-dashboard">
-    <section class="kinetic-hero">
-      <div class="hero-orbit" aria-hidden="true"></div>
-      <div class="hero-brand"><b>MEL</b><strong>BET</strong><span>PARTNERS</span></div>
-      <div class="hero-badge">AGENT & AFFILIATE NETWORK</div>
-      <h1>${c.heroTop}<br><em>${c.heroAccent}</em></h1>
-      <p>${c.heroText}</p>
-      <button class="hero-action" data-nav="${a?.status==='active_agent'?'profile':'apply'}"><span>${a?.status==='active_agent'?c.openProfile:c.start}</span>${icon('arrow')}</button>
+  const state=a?.status==='active_agent'?'verified':a?'pending':'guest';
+  const stateLabel=status?status[1]:(lang==='ru'?'Не зарегистрирован':'Not registered');
+  return `<div class="view ecosystem-dashboard">
+    <section class="ecosystem-hero">
+      <div class="ecosystem-grid" aria-hidden="true"></div>
+      <div class="ecosystem-brand"><i></i><span><b>Partners Agent</b><small>AGENT NETWORK · MOBILE WORKSPACE</small></span></div>
+      <div class="ecosystem-copy"><span>PARTNER OPERATIONS</span><h1>${c.heroTop}<br><em>${c.heroAccent}</em></h1><p>${c.heroText}</p></div>
+      <div class="user-state ${state}"><i></i><span>${lang==='ru'?'Статус':'Status'}: <b>${stateLabel}</b></span></div>
     </section>
-    ${status?`<button class="application-status compact-status" data-nav="apply"><span>${status[0]}</span><div><b>${status[1]}</b><small>${c.viewStatus}</small></div>${icon('arrow')}</button>`:''}
-    <div class="dashboard-heading"><div><span>${c.quick}</span><h2>${c.panel}</h2></div><small>${c.services}</small></div>
-    <section class="action-deck">
-      <button class="deck-card deck-agent" data-nav="apply"><i>${icon('briefcase')}</i><span><small>${c.registration}</small><b>${c.become}</b><em>${c.sendApplication}</em></span>${icon('arrow')}</button>
-      <button class="deck-card deck-partner" data-nav="check"><i>${icon('user')}</i><span><small>${c.cabinet}</small><b>${c.already}</b></span>${icon('arrow')}</button>
-      <button class="deck-card deck-media" data-nav="agent_lookup"><i>${icon('search')}</i><span><small>${c.security}</small><b>${c.agentCheck}</b></span>${icon('arrow')}</button>
-      <button class="deck-card deck-contact" data-nav="manager_lookup"><i>${icon('shield')}</i><span><b>${c.managerCheck}</b></span></button>
-      <button class="deck-card deck-blocked" data-nav="support"><i>${icon('message')}</i><span><b>${c.support}</b><em>${c.managerHelp}</em></span></button>
+    ${status?`<button class="application-status premium-status" data-nav="apply"><span>${status[0]}</span><div><b>${status[1]}</b><small>${status[2]}</small></div>${icon('arrow')}</button>`:''}
+    <div class="dashboard-heading"><div><span>${c.quick}</span><h2>${c.panel}</h2></div><small>6 ${lang==='ru'?'сервисов':'services'}</small></div>
+    <section class="premium-action-grid">
+      <button class="premium-action-card" data-nav="agent_lookup"><i>${icon('shield')}</i><span><b>${c.agentCheck}</b><small>${lang==='ru'?'Проверить официальный статус':'Verify official status'}</small></span>${icon('arrow')}</button>
+      <button class="premium-action-card featured" data-nav="apply"><i>${icon('briefcase')}</i><span><b>${c.become}</b><small>${c.sendApplication}</small></span>${icon('arrow')}</button>
+      <button class="premium-action-card" data-nav="manager_lookup"><i>${icon('user')}</i><span><b>${c.managerCheck}</b><small>${lang==='ru'?'Проверка по ID или username':'Check by ID or username'}</small></span>${icon('arrow')}</button>
+      <button class="premium-action-card" data-nav="stats"><i>${icon('chart')}</i><span><b>${c.stats}</b><small>${lang==='ru'?'Показатели и результаты':'Performance and results'}</small></span>${icon('arrow')}</button>
+      <button class="premium-action-card" data-nav="profile"><i>${icon('user')}</i><span><b>${c.myAccount}</b><small>${lang==='ru'?'Данные и статус аккаунта':'Account details and status'}</small></span>${icon('arrow')}</button>
+      <button class="premium-action-card" data-nav="support"><i>${icon('message')}</i><span><b>${c.support}</b><small>${c.managerHelp}</small></span>${icon('arrow')}</button>
     </section>
   </div>`
 }
@@ -55,4 +56,4 @@ export function stats(account,lang='ru'){const c=text(lang),active=['approved','
 export const instructions=()=>`<div class="view">${pageHead('Инструкции','Всё важное — коротко')}<section class="instruction-list">${[['1','Как начать работу','Заполните заявку и дождитесь подтверждения.'],['2','Работа с игроками','Используйте только согласованные материалы.'],['3','Важные правила','Не передавайте доступ третьим лицам.']].map(x=>`<article><b>${x[0]}</b><div><h2>${x[1]}</h2><p>${x[2]}</p></div></article>`).join('')}</section></div>`;
 export const support=(lang='ru')=>{const c=text(lang);return `<div class="view">${pageHead(c.support,c.supportSubtitle)}<section class="soft-hero compact"><span>${c.online}</span><h1>${c.needHelp}</h1><p>${c.supportText}</p>${button(c.createTicket,'data-nav="ticket"')}</section></div>`};
 export const ticket=(lang='ru')=>{const c=text(lang);return `<div class="view">${pageHead(c.newTicket,c.answerTelegram)}<form class="form-card" data-form="ticket"><label class="field"><span>${c.subject} *</span><input name="subject" required></label><label class="field"><span>${c.category} *</span><select name="category"><option>${c.general}</option><option>${c.application}</option><option>${c.tech}</option></select></label><label class="field"><span>${c.message} *</span><textarea name="body" required></textarea></label>${button(c.send,'type="submit"')}</form></div>`};
-export const profile=(account,lang='ru')=>{const c=text(lang),u=account?.telegram||{},a=account?.application;return `<div class="view">${pageHead(c.myAccount,c.yourAccount)}<section class="profile-hero"><div class="profile-avatar">${esc((u.first_name||'P')[0])}</div><div><h2>${esc(u.first_name||c.user)}</h2><p>${u.username?'@'+esc(u.username):'Telegram'}</p><span class="status-tag">${a?.status||'GUEST'}</span></div></section><section class="id-card"><span>TELEGRAM ID</span><b>${u.id||'—'}</b></section>${a?`<section class="id-card"><span>${c.applicationLabel}</span><b>№${a.id}</b></section>`:''}${a?button('Открыть регистрацию','data-nav="apply"','secondary'):''}${account?.is_manager?button('Кабинет менеджера','data-nav="manager"'):''}${account?.is_superadmin?button('Управление менеджерами','data-nav="managers"','secondary'):''}${button(c.instructions,'data-nav="instructions"','secondary')}${button(c.support,'data-nav="support"','secondary')}</div>`};
+export const profile=(account,lang='ru')=>{const c=text(lang),u=account?.telegram||{},a=account?.application,verified=a?.status==='active_agent',status=a?(statuses(lang)[a.status]||statuses(lang).reviewing)[1]:(lang==='ru'?'Гость':'Guest'),date=a?.created_at?new Date(a.created_at).toLocaleDateString(lang==='ru'?'ru-RU':'en-GB'):'—',avatar=u.photo_url?`<img src="${esc(u.photo_url)}" alt="Avatar">`:esc((u.first_name||'P')[0]);return `<div class="view profile-view">${pageHead(c.myAccount,c.yourAccount)}<section class="agent-profile-card"><div class="profile-avatar">${avatar}</div><div class="profile-identity"><span>${verified?'✓ VERIFIED AGENT':'PARTNERS MEMBER'}</span><h2>${esc(a?.name||u.first_name||c.user)}</h2><p>${u.username?'@'+esc(u.username):'Telegram ID '+(u.id||'—')}</p></div><b class="profile-status ${verified?'verified':''}">${status}</b></section><section class="profile-facts"><article><span>AGENT ID</span><b>${a?'PA-'+String(a.id).padStart(5,'0'):'—'}</b></article><article><span>${lang==='ru'?'СТРАНА':'COUNTRY'}</span><b>${esc(a?.country||'—')}</b></article><article><span>${lang==='ru'?'ГОРОД':'CITY'}</span><b>${esc(a?.city||'—')}</b></article><article><span>${lang==='ru'?'ПОДКЛЮЧЁН':'JOINED'}</span><b>${date}</b></article><article><span>${lang==='ru'?'ТЕЛЕФОН':'PHONE'}</span><b>${esc(a?.phone||'—')}</b></article><article><span>EMAIL</span><b>${esc(a?.email||'—')}</b></article></section><section class="profile-metrics"><article><span>${lang==='ru'?'Баланс':'Balance'}</span><b>—</b></article><article><span>${lang==='ru'?'Игроки':'Players'}</span><b>—</b></article><article><span>${lang==='ru'?'Депозиты':'Deposits'}</span><b>—</b></article><article><span>${lang==='ru'?'Выводы':'Withdrawals'}</span><b>—</b></article><article><span>${lang==='ru'?'Доход':'Income'}</span><b>—</b></article></section><section class="profile-actions">${a?button('Открыть регистрацию','data-nav="apply"','secondary'):''}${account?.is_manager?button('Кабинет менеджера','data-nav="manager"'):''}${account?.is_superadmin?button('Управление менеджерами','data-nav="managers"','secondary'):''}${button(c.instructions,'data-nav="instructions"','secondary')}${button(c.support,'data-nav="support"','secondary')}</section></div>`};

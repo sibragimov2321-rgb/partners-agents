@@ -514,13 +514,28 @@ def submit_ticket(user: dict, payload: TicketIn) -> dict:
 def check_contact(payload: ContactCheckIn, blocked_only: bool = False) -> dict:
     query = payload.query.strip().lower().lstrip("@")
     with Session(engine) as session:
-        clauses = [AgentApplication.email.ilike(query), AgentApplication.telegram_username.ilike(query)]
+        clauses = [
+            AgentApplication.email.ilike(query),
+            AgentApplication.phone.ilike(query),
+            AgentApplication.telegram_username.ilike(query),
+        ]
         if query.isdigit():
             clauses.append(AgentApplication.telegram_id == int(query))
         application = session.scalar(select(AgentApplication).where(or_(*clauses)))
         if blocked_only:
             return {"blocked": bool(application and application.status == "blocked")}
-        return {"registered": bool(application)}
+        verified = bool(application and application.status == "active_agent")
+        public_profile = None
+        if verified:
+            public_profile = {
+                "name": application.name,
+                "agent_id": f"PA-{application.id:05d}",
+                "country": application.country,
+                "city": application.city,
+                "status": "verified",
+                "connected_at": (application.approved_at or application.created_at).isoformat(),
+            }
+        return {"registered": bool(application), "verified": verified, "agent": public_profile}
 
 
 def check_manager(payload: ContactCheckIn) -> dict:
