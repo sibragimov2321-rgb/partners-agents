@@ -3,10 +3,12 @@
 @media(max-width:380px){.brand-hero{min-height:390px}.portal-menu button,.choice-stack button{min-height:66px}.hero-copy h1{font-size:24px}}
 
 /* 2026 kinetic dashboard: original layout, no reference mascot or copied menu. */
-#app{background:radial-gradient(circle at 90% 4%,rgba(255,196,0,.12),transparent 26%),linear-gradient(180deg,rgba(3,3,3,.84),rgba(3,3,3,.96)),url('/static/assets/branding/melbet-kinetic-bg-v2.png') center top/cover fixed!important}
+#app{position:relative;isolation:isolate;background:#03070d!important}
+#app:before{content:"";position:fixed;z-index:-2;inset:0;background:#03070d url('/static/assets/branding/partners-sports-background.png') center top/cover no-repeat;pointer-events:none}
+#app:after{content:"";position:fixed;z-index:-1;inset:0;background:linear-gradient(180deg,rgba(2,6,12,.5),rgba(2,5,10,.68) 52%,rgba(2,4,8,.8));pointer-events:none}
 .app-header,.bottom-nav{background:rgba(7,7,7,.93)!important;border-color:rgba(255,255,255,.07)!important;backdrop-filter:blur(18px)}
 .melbet-dashboard{gap:16px;padding-bottom:8px}
-.kinetic-hero{position:relative;isolation:isolate;min-height:326px;margin:-10px -10px 0;overflow:hidden;padding:22px 20px;border:1px solid rgba(255,210,56,.19);border-radius:26px;background:linear-gradient(90deg,rgba(3,3,3,.98) 0%,rgba(3,3,3,.82) 58%,rgba(3,3,3,.32)),url('/static/assets/branding/melbet-kinetic-bg-v2.png') 50% 56%/cover;box-shadow:0 26px 50px rgba(0,0,0,.42)}
+.kinetic-hero{position:relative;isolation:isolate;min-height:326px;margin:-10px -10px 0;overflow:hidden;padding:22px 20px;border:1px solid rgba(255,210,56,.19);border-radius:26px;background:linear-gradient(90deg,rgba(3,3,3,.97) 0%,rgba(3,3,3,.78) 58%,rgba(3,3,3,.24)),url('/static/assets/branding/partners-sports-background.png') center 20%/cover;box-shadow:0 26px 50px rgba(0,0,0,.42)}
 .kinetic-hero:before{content:"";position:absolute;z-index:-1;inset:0;background:linear-gradient(180deg,rgba(255,205,36,.07),transparent 35%,rgba(0,0,0,.2))}
 .hero-orbit{position:absolute;z-index:-1;top:-106px;right:-132px;width:286px;height:286px;border:1px solid rgba(255,212,68,.34);border-radius:50%;box-shadow:0 0 0 26px rgba(255,200,0,.035),0 0 0 54px rgba(255,200,0,.02)}
 .hero-brand{display:flex;align-items:baseline;width:max-content;font-size:26px;font-style:italic;font-weight:950;letter-spacing:-.085em;text-shadow:0 3px 16px #000}.hero-brand b{color:#fff}.hero-brand strong{color:#ffc400}.hero-brand span{margin-left:9px;color:#ffe681;font-size:8px;font-style:normal;letter-spacing:.15em}
