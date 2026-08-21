@@ -1,4 +1,4 @@
-import { esc, icon, pageHead } from './ui.js?v=20260821-5';
+import { esc, icon, pageHead } from './ui.js?v=20260821-6';
 
 const e = value => esc(value ?? '');
 const action = (label, attrs = '', kind = 'primary') => `<button class="app-btn ${kind}" ${attrs}>${label}</button>`;
@@ -63,6 +63,8 @@ function infoScreen(hasApplication = false) {
     <section class="promo-card sales-section"><i>${icon('bolt')}</i><div><span>ПЕРСОНАЛЬНЫЙ ИНСТРУМЕНТ</span><h2>Личный промокод</h2><p>После активации агент получает персональный промокод для привлечения и регистрации своих игроков.</p><div class="promo-demo"><code>YOURCODE</code><button type="button" disabled aria-label="Демонстрация копирования">${icon('copy')}</button></div><small>Демонстрационный код. Настоящий промокод появится после активации.</small></div></section>
 
     <section class="tools-card sales-section"><div class="tools-visual"><i>${icon('message')}</i><b>BOT</b><span></span></div><div class="section-title"><span>ИНСТРУМЕНТЫ ДЛЯ РАБОТЫ</span><h2>Боты для агентов</h2></div><p>Мы предоставляем готовые Telegram-боты и инструменты, которые помогают работать с игроками и упрощают ежедневную работу агента.</p><div class="tool-tags"><span>${icon('message')} Telegram Bot</span><span>${icon('users')} Работа с игроками</span><span>${icon('wallet')} Пополнение / вывод</span><span>${icon('shield')} Поддержка</span></div></section>
+
+    <section class="teamcash-guide sales-section"><div class="guide-heading"><i>${icon('play')}</i><div><span>ВИДЕОГАЙД · 2:41</span><h2>Как работает приложение TeamCash</h2></div></div><p>Посмотрите инструкцию перед регистрацией. В видео показаны основные разделы приложения и рабочие операции агента.</p><div class="guide-player"><video controls playsinline preload="metadata" poster="/static/assets/guides/teamcash-agent-guide-poster.jpg" aria-label="Гайд по работе с приложением TeamCash"><source src="/static/assets/guides/teamcash-agent-guide.mp4" type="video/mp4">Ваше устройство не поддерживает просмотр видео.</video></div><div class="guide-topics"><span>${icon('wallet')} Баланс и лимиты</span><span>${icon('arrow')} Пополнение и вывод</span><span>${icon('users')} Работа с игроками</span></div><small>Видео открывается прямо внутри Telegram. Автоматическое воспроизведение отключено.</small></section>
 
     <section class="earnings-section sales-section"><div class="section-title"><span>ПОНЯТНЫЙ РАСЧЁТ</span><h2>Как вы зарабатываете</h2></div><div class="calculation-grid"><article><span>ПОПОЛНЕНИЕ</span><p>Игрок пополняет</p><b>$1 000</b><div><small>Доход агента</small><strong>8% = $80</strong></div></article><article><span>ВЫВОД</span><p>Игрок выводит</p><b>$1 000</b><div><small>Доход агента</small><strong>2% = $20</strong></div></article></div><p class="income-note">Чем больше операций проходит через агента, тем выше потенциальный доход. Расчёт приведён как пример и не является гарантией заработка.</p></section>
 
