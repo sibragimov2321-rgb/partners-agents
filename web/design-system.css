@@ -245,6 +245,16 @@ button:disabled { opacity: .5; filter: grayscale(.25); }
 .premium-action-card.featured { border-color: var(--border-accent); background: linear-gradient(145deg, rgba(53,43,8,.94), rgba(12,13,10,.98)); }
 .premium-action-card.featured > i { background: var(--accent-primary); color: #171300; box-shadow: 0 7px 22px rgba(255,200,0,.18); }
 
+/* Let the sports artwork remain visible beneath the dashboard controls. */
+.premium-action-card {
+  background: linear-gradient(145deg, rgba(16,17,15,.78), rgba(5,6,5,.72));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.premium-action-card > i { background: rgba(255,210,26,.09); }
+.premium-action-card.featured { background: linear-gradient(145deg, rgba(53,43,8,.8), rgba(8,9,7,.75)); }
+.premium-action-card.featured > i { background: rgba(255,210,26,.82); }
+
 /* Shared screens and forms */
 .page-head { min-width: 0; padding: 3px 0; }
 .page-head h1 { font-size: 23px; letter-spacing: -.04em; }
