@@ -20,6 +20,7 @@ from app import storage, webapi
 from app.storage import (
     AgentApplicationHistory,
     Base,
+    DeletedApplicationAudit,
     GeoAgentSetting,
     ManagerAccess,
     ManagerAccessAudit,
@@ -82,6 +83,40 @@ def test_verified_telegram_user_is_saved(isolated_database):
         stored = session.scalar(select(TelegramUser).where(TelegramUser.telegram_id == 101))
         assert stored.username == "user101"
         assert stored.language_code == "ru"
+
+
+def test_manager_can_delete_unneeded_application_and_user_can_reapply(isolated_database):
+    applicant, manager = user(111), user(900)
+    application = create_draft(applicant)
+
+    with pytest.raises(HTTPException) as denied:
+        webapi.delete_manager_application(applicant, application["id"], webapi.DeleteApplicationIn(reason="Тестовая заявка"))
+    assert denied.value.status_code == 403
+
+    result = webapi.delete_manager_application(manager, application["id"], webapi.DeleteApplicationIn(reason="Тестовая заявка"))
+    assert result["deleted"] is True
+    assert webapi.manager_applications(manager) == []
+    with Session(isolated_database) as session:
+        audit = session.scalar(select(DeletedApplicationAudit).where(
+            DeletedApplicationAudit.application_id == application["id"],
+        ))
+        assert audit.reason == "Тестовая заявка"
+        assert audit.actor_telegram_id == 900
+
+    replacement = create_draft(applicant)
+    assert replacement["telegram_id"] == applicant["id"]
+    assert len(webapi.manager_applications(manager)) == 1
+
+
+def test_confirmed_agent_cannot_be_deleted(isolated_database):
+    application = create_draft(user(112))
+    with Session(isolated_database) as session:
+        stored = session.get(storage.AgentApplication, application["id"])
+        stored.status = "approved"
+        session.commit()
+    with pytest.raises(HTTPException) as blocked:
+        webapi.delete_manager_application(user(900), application["id"], webapi.DeleteApplicationIn(reason="Не нужна"))
+    assert blocked.value.status_code == 409
 
 
 def test_complete_agent_flow_and_resume(isolated_database):

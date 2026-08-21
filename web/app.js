@@ -1,6 +1,6 @@
-import { esc, icon } from './ui.js?v=20260821-6';
+import { esc, icon } from './ui.js?v=20260821-7';
 import * as screens from './screens.js?v=20260821-5';
-import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-6';
+import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-7';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const supportsBack=Boolean(tg?.isVersionAtLeast?.('6.1'));
 const supportsHaptics=Boolean(tg?.isVersionAtLeast?.('6.1'));
@@ -24,6 +24,7 @@ const initialLanguage=supportedLanguages.has(savedLanguage)?savedLanguage:(suppo
 const state={view:'home',account:null,loading:true,lang:initialLanguage,form:JSON.parse(sessionStorage.getItem('agent-form')||'{}'),agentStep:Number(localStorage.getItem('agent-step')||0),managerApps:[],managerFilter:'all',managers:[],geoSettings:[],managerGeoSettings:[],registrationStarted:false,justSubmitted:false,forceApplication:false};
 const words=()=>languageCopy[state.lang]||languageCopy.ru;
 const api=(path,options={})=>{const isForm=options.body instanceof FormData;return fetch(path,{...options,headers:{...(!isForm?{'Content-Type':'application/json'}:{}),'X-Telegram-Init-Data':tg?.initData||'',...(options.headers||{})}})};
+const confirmAction=message=>new Promise(resolve=>typeof tg?.showConfirm==='function'?tg.showConfirm(message,resolve):resolve(window.confirm(message)));
 function note(text){toast.textContent=text;toast.classList.add('show');clearTimeout(note.t);note.t=setTimeout(()=>toast.classList.remove('show'),2600)}
 function headerView(){const c=words(),selected=languageOptions.find(item=>item[0]===state.lang)||languageOptions[0];const options=languageOptions.map(([code,label,name])=>`<button class="${state.lang===code?'active':''}" data-language="${code}"><b>${label}</b><span>${name}</span></button>`).join('');header.innerHTML=`<div class="language-picker"><button class="language-trigger" data-language-toggle aria-label="Language">${icon('globe')}<b>${selected[1]}</b></button><div class="language-menu" hidden>${options}</div></div><div class="portal-title"><b>Partners <span>Agent</span></b><small>${c.subtitle}</small></div><button class="header-avatar" data-nav="profile">${esc((state.account?.telegram?.first_name||'P')[0])}</button>`}
 function render(){const c=words();const routes={home:()=>screens.home(state.account,state.lang),stats:()=>screens.stats(state.account,state.lang),profile:()=>screens.profile(state.account,state.lang),manager:()=>renderManager(state.managerApps,state.managerFilter),managers:()=>renderManagerAccess(state.managers,state.managerGeoSettings),agents:()=>screens.agents(state.account,state.lang),partners:screens.partners,banners:screens.banners,agent_lookup:()=>screens.lookup('agent',state.lang),manager_lookup:()=>screens.lookup('manager',state.lang),faq:screens.faq,apply:()=>renderOnboarding(state.account,state.agentStep,state.registrationStarted,state.geoSettings,state.justSubmitted,state.forceApplication),check:()=>screens.check(state.account,state.lang),instructions:screens.instructions,support:()=>screens.support(state.lang),ticket:()=>screens.ticket(state.lang)};const nav=[['home',c.home,'home'],['stats',c.stats,'chart'],['profile',c.profile,'user']];headerView();content.innerHTML=state.loading?screens.loading():(routes[state.view]||routes.home)();bottomNav.innerHTML=nav.map(([v,l,i])=>`<button class="nav-item ${state.view===v?'active':''}" data-nav="${v}">${icon(i)}<span>${l}</span></button>`).join('');hydrateDocuments();updateGeoCondition(content.querySelector('select[name="country"]'));if(supportsBack)state.view==='home'?tg.BackButton.hide():tg.BackButton.show()}
@@ -69,6 +70,17 @@ document.addEventListener('click',async e=>{
   if(managerDocument){const response=await api(`/api/manager/applications/${managerDocument.dataset.applicationId}/documents/${managerDocument.dataset.managerDocument}`);if(!response.ok)return note(await readError(response));const url=URL.createObjectURL(await response.blob());window.open(url,'_blank');return}
   const managerFilter=e.target.closest('[data-manager-filter]');
   if(managerFilter){state.managerFilter=managerFilter.dataset.managerFilter;return render()}
+  const deleteApplication=e.target.closest('[data-delete-application]');
+  if(deleteApplication){
+    const confirmed=await confirmAction('Удалить эту заявку? Пользователь сможет подать новую заявку.');
+    if(!confirmed)return;
+    deleteApplication.disabled=true;
+    const card=deleteApplication.closest('.manager-application');
+    const reason=card?.querySelector('textarea[name="comment"]')?.value.trim()||'Удалена менеджером как ненужная';
+    const response=await api(`/api/manager/applications/${deleteApplication.dataset.deleteApplication}`,{method:'DELETE',body:JSON.stringify({reason})});
+    if(!response.ok){deleteApplication.disabled=false;return note(await readError(response))}
+    const list=await api('/api/manager/applications');state.managerApps=list.ok?await list.json():state.managerApps;note('Заявка удалена');return render();
+  }
   const revokeManager=e.target.closest('[data-revoke-manager]');
   if(revokeManager){revokeManager.disabled=true;const response=await api(`/api/superadmin/managers/${revokeManager.dataset.revokeManager}`,{method:'DELETE'});if(!response.ok)note(await readError(response));else{const list=await api('/api/superadmin/managers');state.managers=await list.json();note('Доступ менеджера удалён');render()}return}
   const flow=e.target.closest('[data-flow-action]');

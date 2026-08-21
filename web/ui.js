@@ -20,6 +20,7 @@ const paths = {
   share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/>',
   download: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>',
   close: '<path d="m6 6 12 12M18 6 6 18"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/>',
   bolt: '<path d="m13 2-9 12h7l-1 8 10-13h-7z"/>',
   play: '<path d="m8 5 11 7-11 7Z"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',

@@ -1,4 +1,4 @@
-import { esc, icon, pageHead } from './ui.js?v=20260821-6';
+import { esc, icon, pageHead } from './ui.js?v=20260821-7';
 
 const e = value => esc(value ?? '');
 const action = (label, attrs = '', kind = 'primary') => `<button class="app-btn ${kind}" ${attrs}>${label}</button>`;
@@ -172,14 +172,16 @@ export function renderOnboarding(account, step = 0, started = false, geoSettings
 
 function managerButtons(application) {
   const common = '<button name="action" value="request_information">Запросить данные</button><button class="danger" name="action" value="reject">Отклонить</button>';
-  if (application.status === 'submitted') return `<button name="action" value="start_review">Начать проверку</button>${common}`;
-  if (application.status === 'under_review') return `<button name="action" value="pre_approve">Предварительно одобрить</button>${common}`;
-  if (application.status === 'pre_approved') return `<button name="action" value="open_deposit">Открыть депозит</button>${common}`;
-  if (application.status === 'waiting_deposit') return `${application.deposit_submitted_at ? '<button name="action" value="confirm_deposit">Подтвердить депозит</button>' : ''}${common}`;
-  if (application.status === 'waiting_documents') return common;
-  if (application.status === 'final_review') return `${application.documents_verified_at ? '<button name="action" value="activate">Активировать агента</button>' : '<button name="action" value="confirm_documents">Подтвердить документы</button>'}${common}`;
-  if (application.status === 'need_information') return '<button name="action" value="comment">Сохранить комментарий</button><button class="danger" name="action" value="reject">Отклонить</button>';
-  return '<button name="action" value="comment">Сохранить комментарий</button>';
+  const remove = application.status !== 'approved' ? `<button type="button" class="manager-delete-application" data-delete-application="${application.id}">${icon('trash')} Удалить заявку</button>` : '';
+  let actions = '<button name="action" value="comment">Сохранить комментарий</button>';
+  if (application.status === 'submitted') actions = `<button name="action" value="start_review">Начать проверку</button>${common}`;
+  else if (application.status === 'under_review') actions = `<button name="action" value="pre_approve">Предварительно одобрить</button>${common}`;
+  else if (application.status === 'pre_approved') actions = `<button name="action" value="open_deposit">Открыть депозит</button>${common}`;
+  else if (application.status === 'waiting_deposit') actions = `${application.deposit_submitted_at ? '<button name="action" value="confirm_deposit">Подтвердить депозит</button>' : ''}${common}`;
+  else if (application.status === 'waiting_documents') actions = common;
+  else if (application.status === 'final_review') actions = `${application.documents_verified_at ? '<button name="action" value="activate">Активировать агента</button>' : '<button name="action" value="confirm_documents">Подтвердить документы</button>'}${common}`;
+  else if (application.status === 'need_information') actions = '<button name="action" value="comment">Сохранить комментарий</button><button class="danger" name="action" value="reject">Отклонить</button>';
+  return `${actions}${remove}`;
 }
 
 export function renderManager(applications = [], filter = 'all') {

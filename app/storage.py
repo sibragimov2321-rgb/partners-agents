@@ -93,6 +93,20 @@ class ApplicationAuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class DeletedApplicationAudit(Base):
+    """Minimal immutable record kept after a manager removes an application."""
+    __tablename__ = "deleted_application_audits"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(Integer, index=True)
+    application_number: Mapped[str] = mapped_column(String(32), index=True)
+    applicant_telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    actor_telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    status: Mapped[str] = mapped_column(String(32))
+    reason: Mapped[str] = mapped_column(String(500))
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class AgentApplicationHistory(Base):
     __tablename__ = "agent_application_history"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

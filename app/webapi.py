@@ -18,6 +18,7 @@ from .storage import (
     AgentApplicationHistory,
     AgentDocument,
     ApplicationAuditLog,
+    DeletedApplicationAudit,
     GeoAgentSetting,
     ManagerAccess,
     ManagerAccessAudit,
@@ -282,6 +283,10 @@ class ManagerActionIn(BaseModel):
         if self.action in {"changes", "request_information", "reject"} and not (self.comment or "").strip():
             raise ValueError("Для этого действия нужен комментарий.")
         return self
+
+
+class DeleteApplicationIn(BaseModel):
+    reason: str = Field(min_length=2, max_length=500)
 
 
 class SubmitProfileIn(BaseModel):
@@ -655,6 +660,47 @@ def manager_applications(user: dict) -> list[dict]:
     with Session(engine) as session:
         applications = session.scalars(select(AgentApplication).order_by(AgentApplication.updated_at.desc(), AgentApplication.id.desc())).all()
         return [application_payload(application, session) for application in applications]
+
+
+def delete_manager_application(user: dict, application_id: int, payload: DeleteApplicationIn) -> dict:
+    """Remove an unneeded application while retaining a non-sensitive audit record."""
+    manager_user(user)
+    actor_id = int(user["id"])
+    with Session(engine) as session:
+        application = session.get(AgentApplication, application_id)
+        if not application:
+            raise HTTPException(404, "Заявка не найдена.")
+        if application.status == "approved":
+            raise HTTPException(409, "Подтверждённого агента удалить нельзя.")
+        application_number = f"PA-{application.id:06d}"
+        reason = payload.reason.strip()
+        snapshot = json.dumps({
+            "name": application.name,
+            "telegram_username": application.telegram_username,
+            "country": application.country,
+            "city": application.city,
+            "created_at": application.created_at.isoformat() if application.created_at else None,
+            "updated_at": application.updated_at.isoformat() if application.updated_at else None,
+        }, ensure_ascii=False)
+        session.add(DeletedApplicationAudit(
+            application_id=application.id,
+            application_number=application_number,
+            applicant_telegram_id=application.telegram_id,
+            actor_telegram_id=actor_id,
+            status=application.status,
+            reason=reason,
+            details=snapshot,
+        ))
+        session.execute(delete(AgentDocument).where(AgentDocument.application_id == application.id))
+        session.execute(delete(AgentApplicationHistory).where(AgentApplicationHistory.application_id == application.id))
+        session.execute(delete(ApplicationAuditLog).where(ApplicationAuditLog.application_id == application.id))
+        session.delete(application)
+        session.commit()
+        return {
+            "deleted": True,
+            "application_id": application_id,
+            "application_number": application_number,
+        }
 
 
 def manager_application_action(user: dict, application_id: int, payload: ManagerActionIn) -> dict:

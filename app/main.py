@@ -23,6 +23,7 @@ from .webapi import (
     ApplicationDraftIn,
     ApplicationIn,
     ContactCheckIn,
+    DeleteApplicationIn,
     ManagerActionIn,
     ManagerAccessIn,
     GeoSettingIn,
@@ -35,6 +36,7 @@ from .webapi import (
     list_manager_access,
     list_geo_settings,
     grant_manager_access,
+    delete_manager_application,
     manager_application_action,
     manager_applications,
     mark_deposit,
@@ -152,6 +154,11 @@ async def get_manager_applications(user: dict = Depends(current_user)):
 @api.post("/api/manager/applications/{application_id}/action")
 async def act_on_application(application_id: int, payload: ManagerActionIn, user: dict = Depends(current_user)):
     return manager_application_action(user, application_id, payload)
+
+
+@api.delete("/api/manager/applications/{application_id}")
+async def delete_application(application_id: int, payload: DeleteApplicationIn, user: dict = Depends(current_user)):
+    return delete_manager_application(user, application_id, payload)
 
 
 @api.get("/api/manager/applications/{application_id}/documents/{kind}")
