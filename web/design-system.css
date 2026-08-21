@@ -38,7 +38,7 @@
 }
 
 * { -webkit-tap-highlight-color: transparent; }
-html, body { min-width: 320px; min-height: 100%; background: var(--bg-primary) !important; color: var(--text-primary); }
+html, body { min-width: 0; min-height: 100%; background: var(--bg-primary) !important; color: var(--text-primary); }
 body {
   position: relative;
   overflow-x: hidden;

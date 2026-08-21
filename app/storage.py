@@ -54,6 +54,19 @@ class AgentApplication(Base):
     source_other: Mapped[str | None] = mapped_column(String(300), nullable=True)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    geo_code: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    has_experience: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    planned_players: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    physical_point: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    referral_agent: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    assigned_manager_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    agent_id: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True, index=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deposit_submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    documents_submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    documents_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class AgentDocument(Base):
@@ -78,6 +91,29 @@ class ApplicationAuditLog(Base):
     action: Mapped[str] = mapped_column(String(80))
     details: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class AgentApplicationHistory(Base):
+    __tablename__ = "agent_application_history"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("agent_applications.id", ondelete="CASCADE"), index=True)
+    actor_telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    previous_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(32), index=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class GeoAgentSetting(Base):
+    __tablename__ = "geo_agent_settings"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    geo_code: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    country: Mapped[str] = mapped_column(String(100), unique=True)
+    currency: Mapped[str] = mapped_column(String(8), default="USD")
+    minimum_deposit: Mapped[int] = mapped_column(Integer, default=100)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class ManagerAccess(Base):
@@ -129,6 +165,19 @@ def init_storage() -> None:
         "source_other": "VARCHAR(300)",
         "submitted_at": "TIMESTAMP",
         "approved_at": "TIMESTAMP",
+        "first_name": "VARCHAR(100)",
+        "last_name": "VARCHAR(100)",
+        "geo_code": "VARCHAR(16)",
+        "has_experience": "BOOLEAN",
+        "planned_players": "VARCHAR(32)",
+        "physical_point": "BOOLEAN",
+        "referral_agent": "VARCHAR(160)",
+        "assigned_manager_id": "BIGINT",
+        "agent_id": "VARCHAR(32)",
+        "activated_at": "TIMESTAMP",
+        "deposit_submitted_at": "TIMESTAMP",
+        "documents_submitted_at": "TIMESTAMP",
+        "documents_verified_at": "TIMESTAMP",
     }
     with engine.begin() as connection:
         for name, sql_type in additions.items():
@@ -139,7 +188,56 @@ def init_storage() -> None:
         if engine.dialect.name == "postgresql":
             connection.execute(text("ALTER TABLE agent_applications ALTER COLUMN telegram_id TYPE BIGINT"))
             connection.execute(text("ALTER TABLE support_tickets ALTER COLUMN telegram_id TYPE BIGINT"))
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_agent_applications_agent_id ON agent_applications (agent_id)"))
         connection.execute(text("DELETE FROM agent_documents WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP"))
+
+    defaults = [
+        ("KG", "Кыргызстан", 50),
+        ("UZ", "Узбекистан", 100),
+        ("TM", "Туркменистан", 100),
+        ("KZ", "Казахстан", 100),
+        ("TJ", "Таджикистан", 100),
+        ("AZ", "Азербайджан", 100),
+        ("TR", "Турция", 100),
+        ("RU", "Россия", 100),
+    ]
+    status_map = {
+        "reviewing": "under_review",
+        "account_review": "under_review",
+        "account_approved": "waiting_deposit",
+        "deposit_review": "waiting_deposit",
+        "profile_form": "waiting_documents",
+        "application_review": "final_review",
+        "changes_requested": "need_information",
+        "active_agent": "approved",
+    }
+    geo_by_country = {country: code for code, country, _ in defaults}
+    with Session(engine) as session:
+        for geo_code, country, minimum_deposit in defaults:
+            existing_setting = session.scalar(select(GeoAgentSetting).where(GeoAgentSetting.geo_code == geo_code))
+            if existing_setting is None:
+                session.add(GeoAgentSetting(
+                    geo_code=geo_code,
+                    country=country,
+                    currency="USD",
+                    minimum_deposit=minimum_deposit,
+                ))
+        applications = session.scalars(select(AgentApplication)).all()
+        for application in applications:
+            legacy_status = application.status
+            if legacy_status in status_map:
+                application.status = status_map[legacy_status]
+            if legacy_status == "deposit_review" and application.deposit_submitted_at is None:
+                application.deposit_submitted_at = application.updated_at
+            if legacy_status == "active_agent":
+                application.activated_at = application.activated_at or application.approved_at or application.updated_at
+                application.agent_id = application.agent_id or f"PA-{application.id:06d}"
+            if not application.first_name and application.name:
+                parts = application.name.strip().split(maxsplit=1)
+                application.first_name = parts[0] if parts else None
+                application.last_name = parts[1] if len(parts) > 1 else None
+            application.geo_code = application.geo_code or geo_by_country.get(application.country)
+        session.commit()
 
 
 def save_telegram_user(user: dict) -> TelegramUser:

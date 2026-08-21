@@ -1,36 +1,98 @@
-import { esc, icon, pageHead } from './ui.js?v=20260821-1';
+import { esc, icon, pageHead } from './ui.js?v=20260821-2';
 
-const steps = ['Аккаунт', 'Проверка', 'Депозит', 'Анкета', 'Одобрение'];
-const stepByStatus = {
-  account_review: 1,
-  account_approved: 2,
-  deposit_review: 2,
-  profile_form: 3,
-  application_review: 4,
-  approved: 4,
-  active_agent: 4,
-  changes_requested: 3,
-  rejected: 4,
-};
-const e = value => esc(value || '');
+const e = value => esc(value ?? '');
 const action = (label, attrs = '', kind = 'primary') => `<button class="app-btn ${kind}" ${attrs}>${label}</button>`;
+
 const countryGroups = [
   ['Основные страны', [['Кыргызстан','🇰🇬'],['Узбекистан','🇺🇿'],['Казахстан','🇰🇿'],['Таджикистан','🇹🇯'],['Туркменистан','🇹🇲'],['Азербайджан','🇦🇿'],['Турция','🇹🇷'],['Россия','🇷🇺']]],
   ['Кавказ и СНГ', [['Армения','🇦🇲'],['Беларусь','🇧🇾'],['Грузия','🇬🇪'],['Молдова','🇲🇩'],['Украина','🇺🇦']]],
-  ['Другие страны Азии', [['Афганистан','🇦🇫'],['Бангладеш','🇧🇩'],['Бахрейн','🇧🇭'],['Бруней','🇧🇳'],['Бутан','🇧🇹'],['Вьетнам','🇻🇳'],['Израиль','🇮🇱'],['Индия','🇮🇳'],['Индонезия','🇮🇩'],['Иордания','🇯🇴'],['Ирак','🇮🇶'],['Иран','🇮🇷'],['Йемен','🇾🇪'],['Камбоджа','🇰🇭'],['Катар','🇶🇦'],['Кипр','🇨🇾'],['Китай','🇨🇳'],['Кувейт','🇰🇼'],['Лаос','🇱🇦'],['Ливан','🇱🇧'],['Малайзия','🇲🇾'],['Мальдивы','🇲🇻'],['Монголия','🇲🇳'],['Мьянма','🇲🇲'],['Непал','🇳🇵'],['ОАЭ','🇦🇪'],['Оман','🇴🇲'],['Пакистан','🇵🇰'],['Палестина','🇵🇸'],['Саудовская Аравия','🇸🇦'],['Северная Корея','🇰🇵'],['Сингапур','🇸🇬'],['Сирия','🇸🇾'],['Таиланд','🇹🇭'],['Тимор-Лесте','🇹🇱'],['Филиппины','🇵🇭'],['Шри-Ланка','🇱🇰'],['Южная Корея','🇰🇷'],['Япония','🇯🇵']]],
+  ['Другие страны Азии', [['Афганистан','🇦🇫'],['Бангладеш','🇧🇩'],['Бахрейн','🇧🇭'],['Бруней','🇧🇳'],['Бутан','🇧🇹'],['Вьетнам','🇻🇳'],['Израиль','🇮🇱'],['Индия','🇮🇳'],['Индонезия','🇮🇩'],['Иордания','🇯🇴'],['Ирак','🇮🇶'],['Иран','🇮🇷'],['Йемен','🇾🇪'],['Камбоджа','🇰🇭'],['Катар','🇶🇦'],['Кипр','🇨🇾'],['Китай','🇨🇳'],['Кувейт','🇰🇼'],['Лаос','🇱🇦'],['Ливан','🇱🇧'],['Малайзия','🇲🇾'],['Мальдивы','🇲🇻'],['Монголия','🇲🇳'],['Мьянма','🇲🇲'],['Непал','🇳🇵'],['ОАЭ','🇦🇪'],['Оман','🇴🇲'],['Пакистан','🇵🇰'],['Палестина','🇵🇸'],['Саудовская Аравия','🇸🇦'],['Сингапур','🇸🇬'],['Сирия','🇸🇾'],['Таиланд','🇹🇭'],['Тимор-Лесте','🇹🇱'],['Филиппины','🇵🇭'],['Шри-Ланка','🇱🇰'],['Южная Корея','🇰🇷'],['Япония','🇯🇵']]],
 ];
 const countryNames = new Set(countryGroups.flatMap(([, countries]) => countries.map(([name]) => name)));
 
-function countryControl(value = '') {
+const statusCopy = {
+  draft: ['Черновик', 'Продолжите заполнение анкеты.'],
+  submitted: ['Заявка отправлена', 'Заявка ожидает начала проверки менеджером.'],
+  under_review: ['На проверке', 'Менеджер проверяет предоставленные данные.'],
+  need_information: ['Нужна информация', 'Откройте заявку и учтите комментарий менеджера.'],
+  pre_approved: ['Предварительно одобрено', 'Менеджер готовит следующий этап регистрации.'],
+  waiting_deposit: ['Ожидается депозит', 'Внесите стартовый депозит согласно условиям вашего GEO.'],
+  waiting_documents: ['Ожидаются документы', 'Загрузите документы только на этом защищённом этапе.'],
+  final_review: ['Финальная проверка', 'Менеджер проверяет документы перед активацией.'],
+  approved: ['Агент подтверждён', 'Рабочий профиль агента активирован.'],
+  rejected: ['Заявка отклонена', 'Причина указана в комментарии менеджера.'],
+};
+
+function countryControl(value = '', geoSettings = []) {
   const known = countryNames.has(value);
   const selected = known ? value : value ? '__other__' : '';
-  const groups = countryGroups.map(([label, countries]) => `<optgroup label="${label}">${countries.map(([name, flag]) => `<option value="${name}" ${selected === name ? 'selected' : ''}>${flag} ${name}</option>`).join('')}</optgroup>`).join('');
-  return `<label class="field"><span>Страна *</span><select name="country" required><option value="">Выберите страну</option>${groups}<option value="__other__" ${selected === '__other__' ? 'selected' : ''}>🌍 Другая страна</option></select></label><label class="field country-other" ${selected === '__other__' ? '' : 'hidden'}><span>Название страны *</span><input name="country_other" value="${selected === '__other__' ? e(value) : ''}" ${selected === '__other__' ? 'required' : ''} placeholder="Введите страну"></label>`;
+  const settings = new Map(geoSettings.map(item => [item.country, item]));
+  const groups = countryGroups.map(([label, countries]) => `<optgroup label="${label}">${countries.map(([name, flag]) => {
+    const setting = settings.get(name);
+    return `<option value="${name}" data-geo="${e(setting?.geo_code)}" data-deposit="${e(setting?.minimum_deposit)}" data-currency="${e(setting?.currency)}" ${selected === name ? 'selected' : ''}>${flag} ${name}</option>`;
+  }).join('')}</optgroup>`).join('');
+  return `<label class="field"><span>Страна *</span><select name="country" required><option value="">Выберите страну</option>${groups}<option value="__other__" ${selected === '__other__' ? 'selected' : ''}>🌍 Другая страна</option></select></label>
+    <label class="field country-other" ${selected === '__other__' ? '' : 'hidden'}><span>Название страны *</span><input name="country_other" value="${selected === '__other__' ? e(value) : ''}" ${selected === '__other__' ? 'required' : ''} placeholder="Введите страну"></label>
+    <div class="geo-condition" data-geo-condition hidden></div>`;
 }
 
-function progress(status) {
-  const active = stepByStatus[status] ?? 0;
-  return `<div class="flow-progress" aria-label="Этап регистрации">${steps.map((label, index) => `<div class="${index < active ? 'done' : index === active ? 'active' : ''}"><i>${index < active ? icon('check') : index + 1}</i><span>${label}</span></div>`).join('')}</div>`;
+function infoScreen(hasApplication = false) {
+  const benefits = [
+    ['users', 'Работа с игроками', 'Помогайте игрокам с пополнением и выводом средств и будьте связующим звеном с сервисом.'],
+    ['briefcase', 'Агентский аккаунт', 'После одобрения вы получите рабочий аккаунт и необходимые инструменты.'],
+    ['message', 'Поддержка менеджера', 'Закреплённый менеджер поможет с запуском и дальнейшей работой.'],
+    ['chart', 'Статистика', 'Основные показатели работы доступны в личном кабинете агента.'],
+    ['shield', 'Безопасная проверка', 'Перед началом работы данные каждого агента проверяются менеджером.'],
+  ];
+  const steps = [
+    ['Создайте аккаунт', 'Зарегистрируйте аккаунт и подготовьте основные данные.'],
+    ['Подтвердите контакты', 'Укажите актуальный телефон, Telegram и электронную почту.'],
+    ['Отправьте заявку', 'Заполните анкету на получение статуса агента.'],
+    ['Пройдите проверку', 'Менеджер проверит данные и при необходимости задаст вопросы.'],
+    ['Пополните агентский аккаунт', 'Сумма определяется настройками выбранной страны / GEO.'],
+    ['Подтвердите данные', 'На отдельном этапе загрузите документ и селфи с документом.'],
+    ['Получите статус агента', 'После финальной проверки менеджер активирует профиль.'],
+  ];
+  const requirements = ['Актуальный номер телефона и email','Заполненные реальные личные данные','Подтверждённый аккаунт','Проверка менеджером','Необходимые документы','Стартовый баланс по условиям GEO','Реальное место ведения деятельности','Соблюдение правил программы'];
+  const prepare = ['Имя и фамилия','Telegram username','Номер телефона и email','Страна и город','Название кассы / точки, если имеется','Местоположение работы','Предыдущий опыт','Источник знакомства с программой','Документ и селфи с документом — только позднее','Подтверждение депозита — после предварительного одобрения'];
+  return `<div class="view onboarding-view agent-intro-view">
+    ${pageHead('Стать агентом', 'Официальная регистрация')}
+    <section class="agent-intro-hero"><div class="intro-orbit" aria-hidden="true"><i></i><b>PA</b></div><span>PARTNERS AGENT NETWORK</span><h1>Начните работать<br><em>с игроками</em></h1><p>Получите доступ к агентской системе после проверки вашей заявки.</p></section>
+    <div class="section-title"><span>ВОЗМОЖНОСТИ</span><h2>Что получает агент</h2></div>
+    <section class="benefit-grid">${benefits.map(([glyph,title,text]) => `<article><i>${icon(glyph)}</i><div><h3>${title}</h3><p>${text}</p></div></article>`).join('')}</section>
+    <section class="process-card" id="agent-process"><div class="section-title"><span>ПРОЦЕСС</span><h2>Как начать работу</h2></div><div class="process-timeline">${steps.map(([title,text],index) => `<article><i>${index + 1}</i><div><h3>${title}</h3><p>${text}</p></div></article>`).join('')}</div></section>
+    <section class="info-accordion" id="agent-requirements"><details open><summary><span>${icon('shield')}<b>Условия и требования</b></span><i>+</i></summary><div class="accordion-body"><ul class="check-list">${requirements.map(item => `<li>${icon('check')}<span>${item}</span></li>`).join('')}</ul><p class="truth-warning"><b>Важно:</b> предоставляйте только достоверную информацию. Несоответствие данных может стать причиной отклонения заявки.</p></div></details></section>
+    <section class="info-accordion"><details><summary><span>${icon('briefcase')}<b>Что понадобится для проверки</b></span><i>+</i></summary><div class="accordion-body"><ul class="prepare-list">${prepare.map(item => `<li>${item}</li>`).join('')}</ul><p class="privacy-note">Документы не запрашиваются на первом экране и станут доступны только после разрешения менеджера.</p></div></details></section>
+    <section class="intro-actions">${action(hasApplication ? 'Моя заявка' : 'Начать регистрацию', hasApplication ? 'data-show-application' : 'data-start-registration')}<div>${action('Условия и требования', 'data-scroll-to="agent-requirements"', 'secondary')}${action('Как работает агент', 'data-scroll-to="agent-process"', 'secondary')}</div>${action('Связаться с менеджером', 'data-nav="support"', 'ghost')}</section>
+  </div>`;
+}
+
+function wizardProgress(step) {
+  return `<div class="wizard-heading"><div><span>ШАГ ${step + 1} ИЗ 6</span><b>${Math.round(((step + 1) / 6) * 100)}%</b></div><div class="wizard-track"><i style="width:${((step + 1) / 6) * 100}%"></i></div></div>`;
+}
+
+function field(label, name, value, type = 'text', placeholder = '', required = true) {
+  return `<label class="field"><span>${label}${required ? ' *' : ''}</span><input type="${type}" name="${name}" ${required ? 'required' : ''} value="${e(value)}" placeholder="${placeholder}"></label>`;
+}
+
+function wizard(application = {}, step = 0, geoSettings = [], telegram = {}) {
+  const screen = Math.max(0, Math.min(4, Number(step) || 0));
+  const data = application || {};
+  let body = '';
+  if (screen === 0) {
+    body = `<form class="flow-card wizard-card" data-form="agent-draft" data-next="1"><div class="form-kicker">ОСНОВНАЯ ИНФОРМАЦИЯ</div><h2>Расскажите, кто вы и где будете работать</h2><div class="field-split">${field('Имя','first_name',data.first_name || telegram.first_name,'text','Ваше имя')}${field('Фамилия','last_name',data.last_name || telegram.last_name,'text','Ваша фамилия')}</div>${countryControl(data.country, geoSettings)}${field('Город','city',data.city,'text','Город')}<div class="flow-actions single">${action('Далее','type="submit"')}</div></form>`;
+  } else if (screen === 1) {
+    body = `<form class="flow-card wizard-card" data-form="agent-draft" data-next="2"><div class="form-kicker">КОНТАКТЫ</div><h2>Как с вами связаться</h2>${field('Номер телефона','phone',data.phone,'tel','+996 700 000 000')}${field('Telegram','telegram_username',data.telegram_username || telegram.username,'text','@username')}${field('E-mail','email',data.email,'email','name@example.com')}<p class="form-help">Используйте международный формат телефона и действующие контакты.</p><div class="flow-actions">${action('Назад','data-agent-step="0"','secondary')}${action('Далее','type="submit"')}</div></form>`;
+  } else if (screen === 2) {
+    const has = data.has_experience === true ? 'yes' : data.has_experience === false ? 'no' : '';
+    body = `<form class="flow-card wizard-card" data-form="agent-draft" data-next="3"><div class="form-kicker">ОПЫТ</div><h2>Расскажите о себе</h2><fieldset class="choice-field"><legend>Есть ли опыт работы агентом / кассиром? *</legend><label><input type="radio" name="has_experience" value="true" ${has === 'yes' ? 'checked' : ''} required><span>Да</span></label><label><input type="radio" name="has_experience" value="false" ${has === 'no' ? 'checked' : ''} required><span>Нет</span></label></fieldset><label class="field experience-details" ${has === 'yes' ? '' : 'hidden'}><span>Предыдущий опыт *</span><textarea name="experience" ${has === 'yes' ? 'required' : ''} placeholder="Коротко расскажите о своей работе">${e(data.experience)}</textarea></label><label class="field"><span>Сколько игроков планируете обслуживать? *</span><select name="planned_players" required><option value="">Выберите вариант</option>${[['up_to_10','До 10'],['10_30','10–30'],['30_100','30–100'],['over_100','Более 100'],['unknown','Пока не знаю']].map(([value,label]) => `<option value="${value}" ${data.planned_players === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><div class="flow-actions">${action('Назад','data-agent-step="1"','secondary')}${action('Далее','type="submit"')}</div></form>`;
+  } else if (screen === 3) {
+    body = `<form class="flow-card wizard-card" data-form="agent-draft" data-next="4"><div class="form-kicker">ИНФОРМАЦИЯ О РАБОТЕ</div><h2>Как будет организована работа</h2>${field('Название кассы / точки','cashdesk_name',data.cashdesk_name,'text','Необязательно',false)}${field('Город / регион / адрес работы','location',data.location,'text','Где вы планируете работать?')}<fieldset class="choice-field"><legend>Есть ли физическая точка? *</legend><label><input type="radio" name="physical_point" value="true" ${data.physical_point === true ? 'checked' : ''} required><span>Да</span></label><label><input type="radio" name="physical_point" value="false" ${data.physical_point === false ? 'checked' : ''} required><span>Нет</span></label></fieldset><label class="field"><span>Откуда узнали о программе? *</span><select name="source" required><option value="">Выберите вариант</option>${[['agent','От действующего агента'],['manager','От менеджера'],['telegram','Telegram'],['instagram','Instagram'],['ads','Реклама'],['friends','Знакомые'],['other','Другое']].map(([value,label]) => `<option value="${value}" ${data.source === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field referral-agent" ${data.source === 'agent' ? '' : 'hidden'}><span>Telegram / ID агента *</span><input name="referral_agent" value="${e(data.referral_agent)}" ${data.source === 'agent' ? 'required' : ''} placeholder="@username или Agent ID"></label><label class="field source-other" ${data.source === 'other' ? '' : 'hidden'}><span>Укажите источник *</span><input name="source_other" value="${e(data.source_other)}" ${data.source === 'other' ? 'required' : ''} placeholder="Напишите источник"></label><div class="flow-actions">${action('Назад','data-agent-step="2"','secondary')}${action('Далее','type="submit"')}</div></form>`;
+  } else {
+    const experience = data.has_experience ? (data.experience || 'Есть опыт') : 'Без опыта';
+    body = `<form class="review-form" data-form="agent-submit"><div class="review-grid"><article><header><span>ЛИЧНЫЕ ДАННЫЕ</span><button type="button" data-agent-step="0">Изменить</button></header><dl><dt>Имя</dt><dd>${e([data.first_name,data.last_name].filter(Boolean).join(' '))}</dd><dt>Страна</dt><dd>${e(data.country)}</dd><dt>Город</dt><dd>${e(data.city)}</dd></dl></article><article><header><span>КОНТАКТЫ</span><button type="button" data-agent-step="1">Изменить</button></header><dl><dt>Телефон</dt><dd>${e(data.phone)}</dd><dt>Telegram</dt><dd>@${e(data.telegram_username)}</dd><dt>E-mail</dt><dd>${e(data.email)}</dd></dl></article><article><header><span>ОПЫТ И РАБОТА</span><button type="button" data-agent-step="2">Изменить</button></header><dl><dt>Опыт</dt><dd>${e(experience)}</dd><dt>Игроки</dt><dd>${e(data.planned_players)}</dd><dt>Касса</dt><dd>${e(data.cashdesk_name || 'Не указана')}</dd><dt>Место</dt><dd>${e(data.location)}</dd><dt>Источник</dt><dd>${e(data.source === 'other' ? data.source_other : data.source)}</dd></dl></article></div><label class="truth-consent"><input type="checkbox" name="confirmed_truth" value="true" required><span>${icon('check')} Я подтверждаю, что предоставленная информация является достоверной.</span></label><div class="flow-actions">${action('Назад','data-agent-step="3"','secondary')}${action('Отправить заявку','type="submit"')}</div></form>`;
+  }
+  return `<div class="view onboarding-view wizard-view">${pageHead('Анкета агента', 'Данные сохраняются после каждого шага')}${wizardProgress(screen)}${notice(application)}${body}</div>`;
 }
 
 function notice(application) {
@@ -38,36 +100,37 @@ function notice(application) {
   return `<section class="manager-note"><b>Комментарий менеджера</b><p>${e(application.manager_comment)}</p></section>`;
 }
 
-function waiting(application, emoji, title, text, badge) {
-  return `<div class="view onboarding-view">${pageHead('Стать агентом', 'Регистрация агента')}${progress(application.status)}${notice(application)}<section class="review-status"><span>${emoji}</span><h1>${title}</h1><p>${text}</p><div class="review-badge">${badge}</div><small>Все данные сохранены. Возвращаться к предыдущим полям не нужно.</small></section></div>`;
+function success(application) {
+  return `<div class="view onboarding-view">${pageHead('Стать агентом', 'Шаг 6 из 6')}${wizardProgress(5)}<section class="submission-success"><div class="success-ring">${icon('check')}</div><span>ЗАЯВКА ПРИНЯТА</span><h1>Заявка отправлена</h1><p>Ваши данные успешно переданы менеджеру. Статус можно отслеживать в разделе «Моя заявка».</p><div><small>НОМЕР ЗАЯВКИ</small><b>${e(application.application_number)}</b><em>На проверке</em></div></section><div class="flow-actions vertical">${action('Моя заявка','data-show-application')}${action('На главную','data-nav="home"','secondary')}</div></div>`;
 }
 
-function accountForm(application) {
-  return `<div class="view onboarding-view">${pageHead('Стать агентом', 'Новый агент')}${progress('new')}<section class="onboarding-intro"><span>ШАГ 1</span><h1>Создайте рабочий аккаунт</h1><p>Откройте аккаунт на платформе и обязательно привяжите телефон или электронную почту.</p><ol><li><i>1</i><div><b>Откройте аккаунт</b><small>Используйте свои настоящие контактные данные</small></div></li><li><i>2</i><div><b>Привяжите контакт</b><small>Телефон или email нужен для проверки</small></div></li><li><i>3</i><div><b>Отправьте на проверку</b><small>Менеджер подтвердит аккаунт</small></div></li></ol></section>${notice(application)}<form class="flow-card" data-form="account-start"><label class="field"><span>ID, логин или email аккаунта *</span><input name="account_identifier" required minlength="3" value="${e(application?.account_identifier)}" placeholder="Ваш аккаунт"></label><div class="field-split"><label class="field"><span>Телефон</span><input name="phone" inputmode="tel" value="${e(application?.phone)}" placeholder="+7 000 000 00 00"></label><label class="field"><span>Email</span><input name="email" type="email" value="${e(application?.email)}" placeholder="name@example.com"></label></div><p class="form-help">Заполните хотя бы телефон или email.</p>${action('Я создал аккаунт', 'type="submit"')}</form></div>`;
+function applicationTimeline(application) {
+  const stageByStatus = {draft:0,submitted:1,under_review:2,need_information:2,pre_approved:2,waiting_deposit:3,waiting_documents:4,final_review:4,approved:5,rejected:2};
+  const active = stageByStatus[application.status] ?? 0;
+  const labels = ['Регистрация заполнена','Заявка отправлена','Проверка менеджером','Стартовый депозит','Проверка документов','Активация агента'];
+  const completed = application.status === 'approved' ? labels.length : active;
+  return `<div class="status-timeline">${labels.map((label,index) => `<article class="${index < completed ? 'done' : index === active ? 'active' : ''}"><i>${index < completed ? icon('check') : index + 1}</i><span>${label}</span></article>`).join('')}</div>`;
 }
 
-function deposit(application, correction = false) {
-  return `<div class="view onboarding-view">${pageHead('Стать агентом', 'Первоначальный депозит')}${progress('account_approved')}${notice(application)}<section class="deposit-card"><i>${icon('wallet')}</i><span>ШАГ 3</span><h1>${correction ? 'Исправьте подтверждение' : 'Пополните баланс для начала работы'}</h1><p>Первоначальный депозит станет рабочим балансом для проведения операций с игроками.</p></section><section class="secure-upload"><div><b>Подтверждение депозита</b><small>Необязательно, но ускоряет проверку · JPG, PNG или WEBP до 8 МБ</small></div><label class="upload-box ${application.documents?.deposit ? 'uploaded' : ''}"><input type="file" accept="image/jpeg,image/png,image/webp" data-doc-kind="deposit"><span>${application.documents?.deposit ? 'Заменить скриншот' : 'Загрузить скриншот'}</span></label><div class="document-preview" data-preview="deposit">${application.documents?.deposit ? `<img data-secure-doc="deposit" alt="Подтверждение депозита"><button data-delete-doc="deposit">Удалить</button>` : ''}</div></section>${action('Я сделал депозит', 'data-flow-action="deposit"')}</div>`;
+function myApplication(application) {
+  const copy = statusCopy[application.status] || statusCopy.under_review;
+  return `<div class="view onboarding-view application-view">${pageHead('Моя заявка', application.application_number)}${notice(application)}<section class="application-overview ${application.status}"><div><span>ЗАЯВКА ${e(application.application_number)}</span><h1>${copy[0]}</h1><p>${copy[1]}</p></div><b>${e(copy[0])}</b></section><section class="timeline-card"><div class="form-kicker">ПРОГРЕСС РЕГИСТРАЦИИ</div>${applicationTimeline(application)}</section><section class="application-facts"><article><span>GEO</span><b>${e(application.geo_code || '—')}</b></article><article><span>СТРАНА</span><b>${e(application.country || '—')}</b></article><article><span>МЕНЕДЖЕР</span><b>${application.assigned_manager_id ? `ID ${application.assigned_manager_id}` : 'Назначается'}</b></article><article><span>ОБНОВЛЕНО</span><b>${application.updated_at ? new Date(application.updated_at).toLocaleDateString('ru-RU') : '—'}</b></article></section>${application.status === 'need_information' ? action('Дополнить данные','data-resume-application') : ''}${action('Связаться с менеджером','data-nav="support"','secondary')}</div>`;
 }
 
-function field(label, name, value, type = 'text', placeholder = '') {
-  return `<label class="field"><span>${label} *</span><input type="${type}" name="${name}" required value="${e(value)}" placeholder="${placeholder}"></label>`;
+function deposit(application) {
+  const setting = application.geo_setting;
+  const amount = setting ? `${setting.minimum_deposit} ${setting.currency}` : 'уточняется менеджером';
+  const depositAction = application.deposit_submitted_at
+    ? `<section class="review-status compact"><span>🕐</span><h2>Депозит проверяется</h2><p>Менеджер получил подтверждение и проверит его вручную.</p></section>`
+    : application.documents?.deposit
+      ? action('Я внёс депозит','data-flow-action="deposit"')
+      : '<button class="app-btn primary" disabled>Сначала загрузите подтверждение</button>';
+  return `<div class="view onboarding-view">${pageHead('Стартовый депозит', application.application_number)}${notice(application)}<section class="deposit-card"><i>${icon('wallet')}</i><span>СЛЕДУЮЩИЙ ЭТАП</span><h1>Заявка предварительно одобрена</h1><p>Минимальная сумма для вашего региона:</p><strong>${e(amount)}</strong><small>${e(application.country || application.geo_code || '')}</small></section><section class="secure-upload"><div><b>Подтверждение депозита</b><small>JPG, PNG или WEBP до 8 МБ. Файл доступен только вам и менеджеру.</small></div>${documentRow('deposit','Чек / подтверждение',application.documents?.deposit)}</section>${depositAction}</div>`;
 }
 
-function wizard(application, step = 0) {
-  const screen = Math.max(0, Math.min(3, Number(step) || 0));
-  const data = application || {};
-  let body = '';
-  if (screen === 0) {
-    body = `<form class="flow-card" data-form="agent-draft" data-next="1"><div class="form-kicker">ШАГ 1 · ОСНОВНАЯ ИНФОРМАЦИЯ</div>${field('Имя и фамилия', 'name', data.name, 'text', 'Ваше имя')}${field('Номер телефона', 'phone', data.phone, 'tel', '+7 000 000 00 00')}${field('Email', 'email', data.email, 'email', 'name@example.com')}<label class="field"><span>Опыт работы</span><textarea name="experience" placeholder="Коротко расскажите об опыте">${e(data.experience)}</textarea></label>${action('Сохранить и продолжить', 'type="submit"')}</form>`;
-  } else if (screen === 1) {
-    body = `<form class="flow-card" data-form="agent-draft" data-next="2"><div class="form-kicker">ШАГ 2 · ИНФОРМАЦИЯ О КАССЕ</div>${field('Название кассы', 'cashdesk_name', data.cashdesk_name, 'text', 'Например, Cash Point')}${countryControl(data.country)}${field('Город', 'city', data.city, 'text', 'Город')}${field('Местоположение / район', 'location', data.location, 'text', 'Район или адрес')}<label class="field"><span>Откуда вы узнали о программе? *</span><select name="source" required><option value="">Выберите вариант</option>${[['telegram','Telegram'],['instagram','Instagram'],['facebook','Facebook'],['recommendation','По рекомендации'],['manager','Менеджер'],['other','Другой источник']].map(([value, label]) => `<option value="${value}" ${data.source === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field source-other" ${data.source === 'other' ? '' : 'hidden'}><span>Укажите источник *</span><input name="source_other" value="${e(data.source_other)}" ${data.source === 'other' ? 'required' : ''} placeholder="Напишите источник"></label><div class="flow-actions">${action('Назад', 'data-agent-step="0"', 'secondary')}${action('Сохранить и продолжить', 'type="submit"')}</div></form>`;
-  } else if (screen === 2) {
-    body = `<div class="form-kicker standalone">ШАГ 3 · ДОКУМЕНТЫ И ПОДТВЕРЖДЕНИЕ</div><section class="privacy-card">${icon('shield')}<div><b>Документы защищены</b><p>Загружайте только чёткие фотографии. Доступ к ним есть только у авторизованных менеджеров.</p></div></section><section class="secure-upload">${documentRow('passport', 'Фото паспорта', data.documents?.passport)}${documentRow('selfie', 'Селфи с паспортом', data.documents?.selfie)}</section><div class="flow-actions">${action('Назад', 'data-agent-step="1"', 'secondary')}${action('Продолжить', 'data-agent-step="3"')}</div>`;
-  } else {
-    body = `<div class="form-kicker standalone">ШАГ 4 · ПРОВЕРКА ДАННЫХ</div><section class="review-grid"><article><span>КОНТАКТЫ</span><dl><dt>Имя</dt><dd>${e(data.name)}</dd><dt>Телефон</dt><dd>${e(data.phone)}</dd><dt>Email</dt><dd>${e(data.email)}</dd></dl></article><article><span>КАССА</span><dl><dt>Название</dt><dd>${e(data.cashdesk_name)}</dd><dt>Страна</dt><dd>${e(data.country)}</dd><dt>Город</dt><dd>${e(data.city)}</dd><dt>Место</dt><dd>${e(data.location)}</dd></dl></article><article><span>ДОКУМЕНТЫ</span><dl><dt>Паспорт</dt><dd>${data.documents?.passport ? '✅ Загружен' : '❌ Не загружен'}</dd><dt>Селфи</dt><dd>${data.documents?.selfie ? '✅ Загружено' : '❌ Не загружено'}</dd></dl></article><article><span>ИСТОЧНИК</span><p>${e(data.source === 'other' ? data.source_other : data.source)}</p></article></section><div class="flow-actions vertical">${action('Изменить данные', 'data-agent-step="0"', 'secondary')}${action('Отправить заявку', 'data-flow-action="submit"')}</div>`;
-  }
-  return `<div class="view onboarding-view">${pageHead('Анкета агента', `Шаг ${screen + 1} из 4`)}${progress('profile_form')}${notice(application)}<div class="substep"><span style="width:${(screen + 1) * 25}%"></span></div>${body}</div>`;
+function documents(application) {
+  const documentsReady = application.documents?.passport && application.documents?.selfie;
+  return `<div class="view onboarding-view">${pageHead('Подтверждение личности', application.application_number)}${notice(application)}<section class="privacy-card">${icon('shield')}<div><b>Защищённая загрузка</b><p>Документы не публикуются и доступны только вам и авторизованному менеджеру.</p></div></section><section class="secure-upload">${documentRow('passport','Фото документа',application.documents?.passport)}${documentRow('selfie','Селфи с документом',application.documents?.selfie)}</section><section class="document-contact-summary"><span>КОНТАКТЫ ДЛЯ ПРОВЕРКИ</span><p>${e(application.phone)} · ${e(application.email)}</p><p>${e(application.cashdesk_name || 'Без названия кассы')} · ${e(application.location)}</p></section>${documentsReady ? action('Отправить документы на проверку','data-flow-action="documents"') : '<button class="app-btn primary" disabled>Загрузите оба изображения</button>'}</div>`;
 }
 
 function documentRow(kind, title, uploaded) {
@@ -75,45 +138,49 @@ function documentRow(kind, title, uploaded) {
 }
 
 function active(application) {
-  return `<div class="view onboarding-view">${pageHead('Кабинет агента', 'Аккаунт активирован')}${progress('active_agent')}<section class="success-agent"><div class="success-ring">${icon('check')}</div><span>ГОТОВО</span><h1>Вы стали агентом</h1><p>Ваш аккаунт активирован. Теперь вы можете начинать работу с игроками.</p><b>Agent ID · ${application.id}</b></section><section class="agent-shortcuts">${action('Открыть кабинет агента', 'data-nav="profile"')}${action('Как работать с игроками', 'data-nav="instructions"', 'secondary')}${action('Моя статистика', 'data-nav="stats"', 'secondary')}${action('Поддержка', 'data-nav="support"', 'secondary')}</section></div>`;
+  return `<div class="view onboarding-view">${pageHead('Кабинет агента', 'Аккаунт активирован')}<section class="success-agent"><div class="success-ring">${icon('check')}</div><span>✓ ПРОВЕРЕННЫЙ АГЕНТ</span><h1>Профиль активирован</h1><p>Финальная проверка завершена. Теперь ваш статус можно проверить через официальный сервис.</p><b>${e(application.agent_id || application.application_number)}</b></section><section class="application-facts"><article><span>GEO</span><b>${e(application.geo_code || '—')}</b></article><article><span>ДАТА АКТИВАЦИИ</span><b>${application.activated_at ? new Date(application.activated_at).toLocaleDateString('ru-RU') : '—'}</b></article></section><section class="agent-shortcuts">${action('Открыть кабинет агента','data-nav="profile"')}${action('Моя статистика','data-nav="stats"','secondary')}${action('Поддержка','data-nav="support"','secondary')}</section></div>`;
 }
 
-export function renderOnboarding(account, step = 0) {
+export function renderOnboarding(account, step = 0, started = false, geoSettings = [], justSubmitted = false, forceApplication = false) {
   const application = account?.application;
-  if (!application) return accountForm(null);
-  if (application.status === 'reviewing') return waiting(application, '🕐', 'Заявка на проверке', 'Менеджер проверяет ранее отправленную заявку. Все данные сохранены.', 'ПРОВЕРЯЕТСЯ');
-  if (application.status === 'account_review') return waiting(application, '🕐', 'Аккаунт на проверке', 'Аккаунт отправлен менеджеру. После проверки здесь появится следующий этап.', 'ПРОВЕРЯЕТСЯ');
-  if (application.status === 'account_approved') return deposit(application);
-  if (application.status === 'deposit_review') return waiting(application, '🕐', 'Проверяем депозит', 'Менеджер проверяет подтверждение. После одобрения откроется анкета агента.', 'ДЕПОЗИТ НА ПРОВЕРКЕ');
-  if (application.status === 'profile_form') return wizard(application, step);
-  if (application.status === 'application_review') return waiting(application, '🕐', 'Заявка отправлена', 'Менеджер проверит предоставленную информацию. Статус можно отслеживать здесь.', 'ФИНАЛЬНАЯ ПРОВЕРКА');
-  if (application.status === 'approved') return waiting(application, '✅', 'Заявка одобрена', 'Данные проверены. Менеджер готовит активацию рабочего аккаунта.', 'ОЖИДАЕТ АКТИВАЦИИ');
-  if (application.status === 'active_agent') return active(application);
-  if (application.status === 'changes_requested') {
-    if (application.resume_state === 'account_review') return accountForm(application);
-    if (application.resume_state === 'deposit_review') return deposit(application, true);
-    return wizard(application, step);
+  if (!application && !started) return infoScreen(false);
+  if (!application) return wizard({}, step, geoSettings, account?.telegram || {});
+  if (application.status === 'draft') return wizard(application, step, geoSettings, account?.telegram || {});
+  if (application.status === 'submitted' && justSubmitted && !forceApplication) return success(application);
+  if (application.status === 'waiting_deposit') return deposit(application);
+  if (application.status === 'waiting_documents') return documents(application);
+  if (application.status === 'approved') return active(application);
+  if (application.status === 'need_information') {
+    if (!forceApplication && application.resume_state === 'waiting_deposit') return deposit(application);
+    if (!forceApplication && ['waiting_documents','final_review'].includes(application.resume_state)) return documents(application);
+    if (!forceApplication) return wizard(application, step, geoSettings, account?.telegram || {});
   }
-  if (application.status === 'rejected') return `<div class="view onboarding-view">${pageHead('Стать агентом', 'Результат проверки')}${progress('rejected')}${notice(application)}<section class="review-status rejected"><span>❌</span><h1>Заявка отклонена</h1><p>Исправьте данные с учётом комментария менеджера и отправьте аккаунт повторно.</p>${action('Исправить и отправить', 'data-flow-action="restart"')}</section></div>`;
-  return accountForm(application);
+  if (application.status === 'rejected') return `<div class="view onboarding-view">${pageHead('Моя заявка', application.application_number)}${notice(application)}<section class="review-status rejected"><span>❌</span><h1>Заявка отклонена</h1><p>Свяжитесь с менеджером, если вам нужно уточнить причину или возможность повторной подачи.</p></section>${action('Связаться с менеджером','data-nav="support"')}</div>`;
+  return myApplication(application);
 }
 
 function managerButtons(application) {
-  if (application.status === 'approved') return '<button name="action" value="activate">Активировать</button><button name="action" value="comment">Комментарий</button>';
-  if (['account_review','deposit_review','application_review','reviewing'].includes(application.status)) return '<button name="action" value="approve">Одобрить</button><button name="action" value="changes">Исправить</button><button class="danger" name="action" value="reject">Отклонить</button><button name="action" value="comment">Комментарий</button>';
-  if (application.status === 'changes_requested') return '<button name="action" value="comment">Комментарий</button><button class="danger" name="action" value="reject">Отклонить</button>';
+  const common = '<button name="action" value="request_information">Запросить данные</button><button class="danger" name="action" value="reject">Отклонить</button>';
+  if (application.status === 'submitted') return `<button name="action" value="start_review">Начать проверку</button>${common}`;
+  if (application.status === 'under_review') return `<button name="action" value="pre_approve">Предварительно одобрить</button>${common}`;
+  if (application.status === 'pre_approved') return `<button name="action" value="open_deposit">Открыть депозит</button>${common}`;
+  if (application.status === 'waiting_deposit') return `${application.deposit_submitted_at ? '<button name="action" value="confirm_deposit">Подтвердить депозит</button>' : ''}${common}`;
+  if (application.status === 'waiting_documents') return common;
+  if (application.status === 'final_review') return `${application.documents_verified_at ? '<button name="action" value="activate">Активировать агента</button>' : '<button name="action" value="confirm_documents">Подтвердить документы</button>'}${common}`;
+  if (application.status === 'need_information') return '<button name="action" value="comment">Сохранить комментарий</button><button class="danger" name="action" value="reject">Отклонить</button>';
   return '<button name="action" value="comment">Сохранить комментарий</button>';
 }
 
 export function renderManager(applications = [], filter = 'all') {
-  const groups={new:['account_review'],review:['deposit_review','application_review','reviewing'],changes:['changes_requested'],approved:['approved','active_agent'],rejected:['rejected']};
-  const shown=filter==='all'?applications:applications.filter(application=>(groups[filter]||[]).includes(application.status));
-  const cards = shown.length ? shown.map(application => `<article class="manager-application"><header><div><span>ЗАЯВКА №${application.id}</span><h2>${e(application.name || application.telegram_username || application.telegram_id)}</h2><p>${application.telegram_username ? '@' + e(application.telegram_username) : 'Telegram ID ' + application.telegram_id}</p></div><b>${e(application.status)}</b></header><dl><dt>Аккаунт</dt><dd>${e(application.account_identifier)}</dd><dt>Телефон</dt><dd>${e(application.phone)}</dd><dt>Email</dt><dd>${e(application.email)}</dd><dt>Касса</dt><dd>${e(application.cashdesk_name)}</dd><dt>GEO</dt><dd>${e([application.country, application.city].filter(Boolean).join(', '))}</dd><dt>Источник</dt><dd>${e(application.source_other || application.source)}</dd></dl><div class="manager-documents">${['deposit','passport','selfie'].filter(kind => application.documents?.[kind]).map(kind => `<button data-manager-document="${kind}" data-application-id="${application.id}">${kind}</button>`).join('')}</div><form data-form="manager-action" data-application-id="${application.id}"><textarea name="comment" placeholder="Комментарий менеджера">${e(application.manager_comment)}</textarea><div class="manager-actions">${managerButtons(application)}</div></form></article>`).join('') : '<section class="empty-state"><h2>Заявок нет</h2><p>В этой категории пока ничего нет.</p></section>';
-  const filters=[['all','Все'],['new','Новые'],['review','На проверке'],['changes','Исправления'],['approved','Одобренные'],['rejected','Отклонённые']];
-  return `<div class="view manager-view">${pageHead('Кабинет менеджера', `${applications.length} заявок`)}<div class="manager-filter">${filters.map(([value,label])=>`<button class="${filter===value?'active':''}" data-manager-filter="${value}">${label}</button>`).join('')}</div>${cards}</div>`;
+  const groups = {new:['submitted'],review:['under_review','pre_approved','waiting_deposit','waiting_documents','final_review'],changes:['need_information'],approved:['approved'],rejected:['rejected']};
+  const shown = filter === 'all' ? applications : applications.filter(application => (groups[filter] || []).includes(application.status));
+  const cards = shown.length ? shown.map(application => `<article class="manager-application"><header><div><span>${e(application.application_number)}</span><h2>${e(application.name || application.telegram_username || application.telegram_id)}</h2><p>${application.telegram_username ? '@' + e(application.telegram_username) : 'Telegram ID ' + application.telegram_id}</p></div><b>${e(statusCopy[application.status]?.[0] || application.status)}</b></header><dl><dt>Дата</dt><dd>${application.created_at ? new Date(application.created_at).toLocaleString('ru-RU') : '—'}</dd><dt>Телефон</dt><dd>${e(application.phone)}</dd><dt>Email</dt><dd>${e(application.email)}</dd><dt>GEO</dt><dd>${e([application.geo_code,application.country,application.city].filter(Boolean).join(' · '))}</dd><dt>Опыт</dt><dd>${application.has_experience ? e(application.experience || 'Есть') : 'Нет'}</dd><dt>Игроки</dt><dd>${e(application.planned_players || '—')}</dd><dt>Касса</dt><dd>${e(application.cashdesk_name || 'Не указана')}</dd><dt>Место</dt><dd>${e(application.location)}</dd><dt>Источник</dt><dd>${e(application.source === 'other' ? application.source_other : application.source)}</dd><dt>Депозит</dt><dd>${application.deposit_submitted_at ? 'Отправлен на проверку' : 'Не отправлен'}</dd><dt>Agent ID</dt><dd>${e(application.agent_id || '—')}</dd></dl><div class="manager-documents">${['deposit','passport','selfie'].filter(kind => application.documents?.[kind]).map(kind => `<button data-manager-document="${kind}" data-application-id="${application.id}">${kind}</button>`).join('')}</div><details class="manager-history"><summary>История статусов (${application.history?.length || 0})</summary><div>${(application.history || []).map(item => `<p><b>${e(item.new_status)}</b><span>${item.created_at ? new Date(item.created_at).toLocaleString('ru-RU') : ''}</span><small>${e(item.comment || '')}</small></p>`).join('') || '<p>История пока пуста</p>'}</div></details><form data-form="manager-action" data-application-id="${application.id}"><textarea name="comment" placeholder="Комментарий / причина отклонения">${e(application.manager_comment)}</textarea><div class="manager-actions">${managerButtons(application)}</div></form></article>`).join('') : '<section class="empty-state"><h2>Заявок нет</h2><p>В этой категории пока ничего нет.</p></section>';
+  const filters = [['all','Все'],['new','Новые'],['review','На проверке'],['changes','Нужны данные'],['approved','Одобренные'],['rejected','Отклонённые']];
+  return `<div class="view manager-view">${pageHead('Кабинет менеджера', `${applications.length} заявок`)}<div class="manager-filter">${filters.map(([value,label]) => `<button class="${filter === value ? 'active' : ''}" data-manager-filter="${value}">${label}</button>`).join('')}</div>${cards}</div>`;
 }
 
-export function renderManagerAccess(managers = []) {
+export function renderManagerAccess(managers = [], geoSettings = []) {
   const list = managers.length ? managers.map(manager => `<article class="access-row"><div class="access-avatar">${e((manager.first_name || manager.username || 'M')[0])}</div><div><b>${e(manager.first_name || manager.username || 'Менеджер')}</b><span>${manager.username ? '@' + e(manager.username) + ' · ' : ''}ID ${manager.telegram_id}</span><small>${manager.is_superadmin ? 'Владелец' : manager.active ? 'Доступ активен' : 'Доступ отключён'}</small></div>${manager.source === 'database' && manager.active ? `<button data-revoke-manager="${manager.telegram_id}">Удалить</button>` : '<i>🔒</i>'}</article>`).join('') : '<section class="empty-state"><h2>Менеджеров пока нет</h2></section>';
-  return `<div class="view manager-access-view">${pageHead('Управление менеджерами', 'Доступ может выдавать только владелец')}<section class="owner-warning">${icon('shield')}<div><b>Защищённое управление</b><p>Укажите числовой Telegram ID. Менеджер сможет проверять заявки, но не сможет назначать других менеджеров.</p></div></section><form class="flow-card" data-form="manager-access"><label class="field"><span>Telegram ID менеджера *</span><input name="telegram_id" inputmode="numeric" pattern="[0-9]+" required placeholder="123456789"></label>${action('Дать доступ менеджеру', 'type="submit"')}</form><div class="access-list"><div class="form-kicker">МЕНЕДЖЕРЫ · ${managers.length}</div>${list}</div></div>`;
+  const geoList = geoSettings.map(setting => `<form class="geo-admin-row" data-form="geo-setting" data-geo-code="${e(setting.geo_code)}"><header><b>${e(setting.geo_code)}</b><label><input type="checkbox" name="active" ${setting.active ? 'checked' : ''}> Активно</label></header><div class="field-split"><label class="field"><span>Страна</span><input name="country" required value="${e(setting.country)}"></label><label class="field"><span>Минимальный депозит</span><input name="minimum_deposit" type="number" min="0" required value="${e(setting.minimum_deposit)}"></label></div><label class="field"><span>Валюта</span><input name="currency" required maxlength="8" value="${e(setting.currency)}"></label><button type="submit">Сохранить GEO</button></form>`).join('');
+  return `<div class="view manager-access-view">${pageHead('Управление', 'Доступно только владельцу')}<section class="owner-warning">${icon('shield')}<div><b>Защищённое управление</b><p>Менеджеры проверяют заявки, но не могут назначать других менеджеров или менять GEO-условия.</p></div></section><form class="flow-card" data-form="manager-access"><label class="field"><span>Telegram ID менеджера *</span><input name="telegram_id" inputmode="numeric" pattern="[0-9]+" required placeholder="123456789"></label>${action('Дать доступ менеджеру','type="submit"')}</form><div class="access-list"><div class="form-kicker">МЕНЕДЖЕРЫ · ${managers.length}</div>${list}</div><section class="geo-admin"><div class="section-title"><span>НАСТРОЙКИ</span><h2>Условия по GEO</h2></div><p>Суммы сохраняются в базе и автоматически отображаются агенту после выбора страны.</p>${geoList || '<div class="empty-state">GEO-настройки не найдены</div>'}</section></div>`;
 }

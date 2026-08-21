@@ -25,12 +25,15 @@ from .webapi import (
     ContactCheckIn,
     ManagerActionIn,
     ManagerAccessIn,
+    GeoSettingIn,
+    SubmitProfileIn,
     TicketIn,
     check_contact,
     check_manager,
     current_user,
     load_document,
     list_manager_access,
+    list_geo_settings,
     grant_manager_access,
     manager_application_action,
     manager_applications,
@@ -44,6 +47,7 @@ from .webapi import (
     submit_application,
     submit_profile,
     submit_ticket,
+    update_geo_setting,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -55,7 +59,7 @@ if not PUBLIC_APP_URL.startswith(("http://", "https://")):
 BASE = Path(__file__).resolve().parent.parent
 WEBHOOK_PATH = "/telegram/webhook"
 
-api = FastAPI(title="MELBET Partners Mini App")
+api = FastAPI(title="Partners Agent Mini App")
 api.mount("/static", StaticFiles(directory=BASE / "web"), name="static")
 dp = Dispatcher()
 
@@ -101,8 +105,23 @@ async def onboarding_deposit(user: dict = Depends(current_user)):
 
 
 @api.post("/api/agent-onboarding/submit")
-async def onboarding_submit(user: dict = Depends(current_user)):
-    return submit_profile(user)
+async def onboarding_submit(payload: SubmitProfileIn, user: dict = Depends(current_user)):
+    return submit_profile(user, payload.confirmed_truth)
+
+
+@api.get("/api/geo-settings")
+async def geo_settings(user: dict = Depends(current_user)):
+    return list_geo_settings(user)
+
+
+@api.get("/api/manager/geo-settings")
+async def manager_geo_settings(user: dict = Depends(current_user)):
+    return list_geo_settings(user, include_inactive=True)
+
+
+@api.put("/api/superadmin/geo-settings/{geo_code}")
+async def put_geo_setting(geo_code: str, payload: GeoSettingIn, user: dict = Depends(current_user)):
+    return update_geo_setting(user, geo_code, payload)
 
 
 @api.post("/api/agent-documents/{kind}")
@@ -201,7 +220,7 @@ async def configure_menu(bot: Bot, chat_id: int | None = None) -> None:
 async def send_portal(message: Message) -> None:
     await configure_menu(message.bot, message.chat.id)
     await message.answer(
-        "\U0001F680 Добро пожаловать в MELBET PARTNERS!\n\n"
+        "\U0001F680 Добро пожаловать в Partners Agent!\n\n"
         "\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u043a\u043d\u043e\u043f\u043a\u0443 \u00ab\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435\u00bb \u043d\u0438\u0436\u0435.\n\n"
         "Внутри доступны: стать агентом, кабинет агента, проверка агента, проверка менеджера и поддержка.",
         reply_markup=open_keyboard(),
@@ -274,7 +293,7 @@ async def managers_command(message: Message):
 @dp.message(Command("help"))
 async def help_command(message: Message):
     await message.answer(
-        "Нижняя кнопка «Открыть» запускает MELBET PARTNERS.\n"
+        "Нижняя кнопка «Открыть» запускает Partners Agent.\n"
         "Также можно использовать команду /menu.",
         reply_markup=open_keyboard(),
     )
@@ -293,7 +312,7 @@ async def telegram_webhook(request: Request):
 async def bot_setup():
     bot = Bot(TOKEN)
     await bot.set_my_commands([
-        BotCommand(command="start", description="Открыть MELBET PARTNERS"),
+        BotCommand(command="start", description="Открыть Partners Agent"),
         BotCommand(command="menu", description="Open app menu"),
         BotCommand(command="help", description="How to use the app"),
     ])

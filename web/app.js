@@ -1,7 +1,6 @@
-import { branding } from './config/branding.js?v=20260819-6';
-import { esc, icon } from './ui.js?v=20260819-6';
-import * as screens from './screens.js?v=20260821-1';
-import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-1';
+import { esc, icon } from './ui.js?v=20260821-3';
+import * as screens from './screens.js?v=20260821-3';
+import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-3';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const supportsBack=Boolean(tg?.isVersionAtLeast?.('6.1'));
 const supportsHaptics=Boolean(tg?.isVersionAtLeast?.('6.1'));
@@ -22,27 +21,46 @@ const savedLanguage=localStorage.getItem('partners-language');
 const telegramLanguage=(tg?.initDataUnsafe?.user?.language_code||'ru').toLowerCase().split('-')[0];
 const supportedLanguages=new Set(languageOptions.map(item=>item[0]));
 const initialLanguage=supportedLanguages.has(savedLanguage)?savedLanguage:(supportedLanguages.has(telegramLanguage)?telegramLanguage:'ru');
-const state={view:'home',account:null,loading:true,lang:initialLanguage,form:JSON.parse(sessionStorage.getItem('agent-form')||'{}'),agentStep:Number(localStorage.getItem('agent-step')||0),managerApps:[],managerFilter:'all',managers:[]};
+const state={view:'home',account:null,loading:true,lang:initialLanguage,form:JSON.parse(sessionStorage.getItem('agent-form')||'{}'),agentStep:Number(localStorage.getItem('agent-step')||0),managerApps:[],managerFilter:'all',managers:[],geoSettings:[],managerGeoSettings:[],registrationStarted:false,justSubmitted:false,forceApplication:false};
 const words=()=>languageCopy[state.lang]||languageCopy.ru;
 const api=(path,options={})=>{const isForm=options.body instanceof FormData;return fetch(path,{...options,headers:{...(!isForm?{'Content-Type':'application/json'}:{}),'X-Telegram-Init-Data':tg?.initData||'',...(options.headers||{})}})};
 function note(text){toast.textContent=text;toast.classList.add('show');clearTimeout(note.t);note.t=setTimeout(()=>toast.classList.remove('show'),2600)}
 function headerView(){const c=words(),selected=languageOptions.find(item=>item[0]===state.lang)||languageOptions[0];const options=languageOptions.map(([code,label,name])=>`<button class="${state.lang===code?'active':''}" data-language="${code}"><b>${label}</b><span>${name}</span></button>`).join('');header.innerHTML=`<div class="language-picker"><button class="language-trigger" data-language-toggle aria-label="Language">${icon('globe')}<b>${selected[1]}</b></button><div class="language-menu" hidden>${options}</div></div><div class="portal-title"><b>Partners <span>Agent</span></b><small>${c.subtitle}</small></div><button class="header-avatar" data-nav="profile">${esc((state.account?.telegram?.first_name||'P')[0])}</button>`}
-function render(){const c=words();const routes={home:()=>screens.home(state.account,state.lang),stats:()=>screens.stats(state.account,state.lang),profile:()=>screens.profile(state.account,state.lang),manager:()=>renderManager(state.managerApps,state.managerFilter),managers:()=>renderManagerAccess(state.managers),agents:()=>screens.agents(state.account,state.lang),partners:screens.partners,banners:screens.banners,agent_lookup:()=>screens.lookup('agent',state.lang),manager_lookup:()=>screens.lookup('manager',state.lang),faq:screens.faq,apply:()=>renderOnboarding(state.account,state.agentStep),check:()=>screens.check(state.account,state.lang),instructions:screens.instructions,support:()=>screens.support(state.lang),ticket:()=>screens.ticket(state.lang)};const nav=[['home',c.home,'home'],['stats',c.stats,'chart'],['profile',c.profile,'user']];headerView();content.innerHTML=state.loading?screens.loading():(routes[state.view]||routes.home)();bottomNav.innerHTML=nav.map(([v,l,i])=>`<button class="nav-item ${state.view===v?'active':''}" data-nav="${v}">${icon(i)}<span>${l}</span></button>`).join('');hydrateDocuments();if(supportsBack)state.view==='home'?tg.BackButton.hide():tg.BackButton.show()}
+function render(){const c=words();const routes={home:()=>screens.home(state.account,state.lang),stats:()=>screens.stats(state.account,state.lang),profile:()=>screens.profile(state.account,state.lang),manager:()=>renderManager(state.managerApps,state.managerFilter),managers:()=>renderManagerAccess(state.managers,state.managerGeoSettings),agents:()=>screens.agents(state.account,state.lang),partners:screens.partners,banners:screens.banners,agent_lookup:()=>screens.lookup('agent',state.lang),manager_lookup:()=>screens.lookup('manager',state.lang),faq:screens.faq,apply:()=>renderOnboarding(state.account,state.agentStep,state.registrationStarted,state.geoSettings,state.justSubmitted,state.forceApplication),check:()=>screens.check(state.account,state.lang),instructions:screens.instructions,support:()=>screens.support(state.lang),ticket:()=>screens.ticket(state.lang)};const nav=[['home',c.home,'home'],['stats',c.stats,'chart'],['profile',c.profile,'user']];headerView();content.innerHTML=state.loading?screens.loading():(routes[state.view]||routes.home)();bottomNav.innerHTML=nav.map(([v,l,i])=>`<button class="nav-item ${state.view===v?'active':''}" data-nav="${v}">${icon(i)}<span>${l}</span></button>`).join('');hydrateDocuments();updateGeoCondition(content.querySelector('select[name="country"]'));if(supportsBack)state.view==='home'?tg.BackButton.hide():tg.BackButton.show()}
 function go(view){state.view=view;if(supportsHaptics)tg.HapticFeedback.impactOccurred('light');render();scrollTo({top:0,behavior:'smooth'})}
-async function load(){try{const r=await api('/api/me');if(r.ok)state.account=await r.json()}catch{}finally{state.loading=false;render()}}
+async function load(){try{const [meResponse,geoResponse]=await Promise.all([api('/api/me'),api('/api/geo-settings')]);if(meResponse.ok)state.account=await meResponse.json();if(geoResponse.ok)state.geoSettings=await geoResponse.json()}catch{}finally{state.loading=false;render()}}
 async function readError(response){try{const data=await response.json();const detail=data.detail;return Array.isArray(detail)?detail.map(x=>x.msg).join(' · '):(detail||words().error)}catch{return words().error}}
 function agentLookupResult(result){
   if(result.verified&&result.agent){const a=result.agent,date=a.connected_at?new Date(a.connected_at).toLocaleDateString(state.lang==='ru'?'ru-RU':'en-GB'):'—';return `<article class="verified-agent-card"><header><i>${icon('check')}</i><div><span>✓ VERIFIED AGENT</span><h3>${esc(a.name||'Agent')}</h3></div></header><dl><dt>Agent ID</dt><dd>${esc(a.agent_id)}</dd><dt>${state.lang==='ru'?'Страна':'Country'}</dt><dd>${esc(a.country||'—')}</dd><dt>${state.lang==='ru'?'Город':'City'}</dt><dd>${esc(a.city||'—')}</dd><dt>${state.lang==='ru'?'Статус':'Status'}</dt><dd>${state.lang==='ru'?'Подтверждён':'Verified'}</dd><dt>${state.lang==='ru'?'Подключён':'Connected'}</dt><dd>${date}</dd></dl></article>`}
   return `<article class="unverified-agent-card"><i>${icon('shield')}</i><div><b>${state.lang==='ru'?'Агент не подтверждён':'Agent not verified'}</b><p>${state.lang==='ru'?'Не переводите деньги человеку, если он не подтверждён системой. Обратитесь в поддержку для дополнительной проверки.':'Do not transfer money unless the person is verified by the system. Contact support for an additional check.'}</p></div></article>`;
 }
 async function refreshAccount(){const response=await api('/api/me');if(response.ok)state.account=await response.json()}
+function updateGeoCondition(select){if(!select)return;const option=select.selectedOptions?.[0],box=select.closest('form')?.querySelector('[data-geo-condition]');if(!box)return;const amount=option?.dataset.deposit,code=option?.dataset.geo,currency=option?.dataset.currency||'USD';box.hidden=!amount;box.innerHTML=amount?`<b>Условия GEO ${esc(code||'')}</b><span>Стартовый депозит — от ${esc(amount)} ${esc(currency)}</span>`:''}
 async function hydrateDocuments(){for(const image of content.querySelectorAll('[data-secure-doc]')){try{const response=await api(`/api/agent-documents/${image.dataset.secureDoc}`);if(response.ok)image.src=URL.createObjectURL(await response.blob())}catch{}}}
+async function prepareDocumentImage(file){
+  if(!file.type.startsWith('image/')||file.size<=2.5*1024*1024||typeof createImageBitmap!=='function')return file;
+  try{
+    const bitmap=await createImageBitmap(file),limit=1800,scale=Math.min(1,limit/Math.max(bitmap.width,bitmap.height));
+    const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+    canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.86));
+    return blob&&blob.size<file.size?new File([blob],`${file.name.replace(/\.[^.]+$/,'')||'document'}.jpg`,{type:'image/jpeg'}):file;
+  }catch{return file}
+}
 document.addEventListener('click',async e=>{
   const language=e.target.closest('[data-language]');
   if(language){state.lang=language.dataset.language;localStorage.setItem('partners-language',state.lang);if(supportsHaptics)tg.HapticFeedback.selectionChanged();return render()}
   const languageToggle=e.target.closest('[data-language-toggle]');
   if(languageToggle){const menu=header.querySelector('.language-menu');menu.hidden=!menu.hidden;return}
   const menu=header.querySelector('.language-menu');if(menu&&!e.target.closest('.language-picker'))menu.hidden=true;
+  const startRegistration=e.target.closest('[data-start-registration]');
+  if(startRegistration){state.registrationStarted=true;state.agentStep=0;state.forceApplication=false;localStorage.setItem('agent-step','0');return render()}
+  const showApplication=e.target.closest('[data-show-application]');
+  if(showApplication){state.justSubmitted=false;state.forceApplication=true;return render()}
+  const resumeApplication=e.target.closest('[data-resume-application]');
+  if(resumeApplication){state.forceApplication=false;state.agentStep=0;return render()}
+  const scrollTarget=e.target.closest('[data-scroll-to]');
+  if(scrollTarget){document.getElementById(scrollTarget.dataset.scrollTo)?.scrollIntoView({behavior:'smooth',block:'start'});return}
   const step=e.target.closest('[data-agent-step]');
   if(step){state.agentStep=Number(step.dataset.agentStep);localStorage.setItem('agent-step',state.agentStep);return render()}
   const remove=e.target.closest('[data-delete-doc]');
@@ -55,25 +73,28 @@ document.addEventListener('click',async e=>{
   if(revokeManager){revokeManager.disabled=true;const response=await api(`/api/superadmin/managers/${revokeManager.dataset.revokeManager}`,{method:'DELETE'});if(!response.ok)note(await readError(response));else{const list=await api('/api/superadmin/managers');state.managers=await list.json();note('Доступ менеджера удалён');render()}return}
   const flow=e.target.closest('[data-flow-action]');
   if(flow){
-    if(flow.dataset.flowAction==='restart'){state.account.application.status='changes_requested';state.account.application.resume_state='account_review';return render()}
     flow.disabled=true;
-    const endpoint=flow.dataset.flowAction==='deposit'?'/api/agent-onboarding/deposit':'/api/agent-onboarding/submit';
-    const response=await api(endpoint,{method:'POST'});
-    if(!response.ok)note(await readError(response));else{await refreshAccount();state.agentStep=0;localStorage.setItem('agent-step','0');note(flow.dataset.flowAction==='deposit'?'Депозит отправлен на проверку':'Заявка отправлена');render()}
+    const isDeposit=flow.dataset.flowAction==='deposit';
+    const endpoint=isDeposit?'/api/agent-onboarding/deposit':'/api/agent-onboarding/submit';
+    const response=await api(endpoint,{method:'POST',...(!isDeposit?{body:JSON.stringify({confirmed_truth:true})}:{})});
+    if(!response.ok)note(await readError(response));else{await refreshAccount();state.agentStep=0;state.forceApplication=false;localStorage.setItem('agent-step','0');note(isDeposit?'Депозит отправлен на проверку':'Документы отправлены на проверку');render()}
     flow.disabled=false;return;
   }
   const target=e.target.closest('[data-nav]');
-  if(target){if(target.dataset.nav==='manager'){const response=await api('/api/manager/applications');if(!response.ok)return note(await readError(response));state.managerApps=await response.json()}if(target.dataset.nav==='managers'){const response=await api('/api/superadmin/managers');if(!response.ok)return note(await readError(response));state.managers=await response.json()}return go(target.dataset.nav)}
+  if(target){if(target.dataset.nav==='apply'){state.forceApplication=false;state.justSubmitted=false;state.registrationStarted=false}if(target.dataset.nav==='manager'){const response=await api('/api/manager/applications');if(!response.ok)return note(await readError(response));state.managerApps=await response.json()}if(target.dataset.nav==='managers'){const [managersResponse,geoResponse]=await Promise.all([api('/api/superadmin/managers'),api('/api/manager/geo-settings')]);if(!managersResponse.ok)return note(await readError(managersResponse));if(!geoResponse.ok)return note(await readError(geoResponse));state.managers=await managersResponse.json();state.managerGeoSettings=await geoResponse.json()}return go(target.dataset.nav)}
   const faq=e.target.closest('.faq-question');if(faq)faq.parentElement.classList.toggle('open');
 });
 
 document.addEventListener('change',async e=>{
-  if(e.target.name==='source'){const other=e.target.closest('form')?.querySelector('.source-other');if(other){other.hidden=e.target.value!=='other';const input=other.querySelector('input');if(input)input.required=e.target.value==='other'}}
-  if(e.target.name==='country'){const other=e.target.closest('form')?.querySelector('.country-other');if(other){other.hidden=e.target.value!=='__other__';const input=other.querySelector('input');if(input)input.required=e.target.value==='__other__'}}
+  if(e.target.name==='source'){const form=e.target.closest('form'),other=form?.querySelector('.source-other'),referral=form?.querySelector('.referral-agent');if(other){other.hidden=e.target.value!=='other';const input=other.querySelector('input');if(input)input.required=e.target.value==='other'}if(referral){referral.hidden=e.target.value!=='agent';const input=referral.querySelector('input');if(input)input.required=e.target.value==='agent'}}
+  if(e.target.name==='country'){const other=e.target.closest('form')?.querySelector('.country-other');if(other){other.hidden=e.target.value!=='__other__';const input=other.querySelector('input');if(input)input.required=e.target.value==='__other__'}updateGeoCondition(e.target)}
+  if(e.target.name==='has_experience'){const details=e.target.closest('form')?.querySelector('.experience-details');if(details){details.hidden=e.target.value!=='true';const textarea=details.querySelector('textarea');if(textarea)textarea.required=e.target.value==='true'}}
   if(!e.target.matches('[data-doc-kind]'))return;
-  const file=e.target.files?.[0];if(!file)return;
+  const original=e.target.files?.[0];if(!original)return;
+  if(original.size>20*1024*1024){note('Исходный файл должен быть не больше 20 МБ');e.target.value='';return}
+  const file=await prepareDocumentImage(original);
   const preview=content.querySelector(`[data-preview="${e.target.dataset.docKind}"]`);
-  if(preview)preview.innerHTML=`<img src="${URL.createObjectURL(file)}" alt="Предпросмотр"><small>Загружается…</small>`;
+  if(preview)preview.innerHTML=`<img src="${URL.createObjectURL(file)}" alt="Предпросмотр"><small>${file.size<original.size?'Фото сжато · ':''}Загружается…</small>`;
   const body=new FormData();body.append('document',file);
   const response=await api(`/api/agent-documents/${e.target.dataset.docKind}`,{method:'POST',body});
   if(!response.ok)note(await readError(response));else{await refreshAccount();note('Файл сохранён');render()}
@@ -97,13 +118,20 @@ document.addEventListener('submit',async e=>{
     if(type==='agent-draft'){
       if(data.country==='__other__'){data.country=(data.country_other||'').trim();if(!data.country)throw new Error('Введите название страны')}
       delete data.country_other;
+      for(const field of ['has_experience','physical_point'])if(field in data)data[field]=data[field]==='true';
       const response=await api('/api/agent-onboarding/draft',{method:'PATCH',body:JSON.stringify(data)});if(!response.ok)throw new Error(await readError(response));await refreshAccount();state.agentStep=Number(form.dataset.next||0);localStorage.setItem('agent-step',state.agentStep);note('Данные сохранены');return render();
+    }
+    if(type==='agent-submit'){
+      const response=await api('/api/agent-onboarding/submit',{method:'POST',body:JSON.stringify({confirmed_truth:data.confirmed_truth==='true'})});if(!response.ok)throw new Error(await readError(response));await refreshAccount();state.justSubmitted=true;state.forceApplication=false;state.agentStep=0;localStorage.setItem('agent-step','0');note(c.applicationSent);return render();
     }
     if(type==='manager-action'){
       const actionValue=e.submitter?.value;if(!actionValue)return;const response=await api(`/api/manager/applications/${form.dataset.applicationId}/action`,{method:'POST',body:JSON.stringify({action:actionValue,comment:data.comment||null})});if(!response.ok)throw new Error(await readError(response));const list=await api('/api/manager/applications');state.managerApps=await list.json();note('Статус заявки обновлён');return render();
     }
     if(type==='manager-access'){
       const response=await api('/api/superadmin/managers',{method:'POST',body:JSON.stringify({telegram_id:Number(data.telegram_id)})});if(!response.ok)throw new Error(await readError(response));const list=await api('/api/superadmin/managers');state.managers=await list.json();form.reset();note('Менеджеру выдан доступ');return render();
+    }
+    if(type==='geo-setting'){
+      const body={country:data.country,currency:data.currency,minimum_deposit:Number(data.minimum_deposit),active:data.active==='on'};const response=await api(`/api/superadmin/geo-settings/${form.dataset.geoCode}`,{method:'PUT',body:JSON.stringify(body)});if(!response.ok)throw new Error(await readError(response));const [publicResponse,managerResponse]=await Promise.all([api('/api/geo-settings'),api('/api/manager/geo-settings')]);state.geoSettings=publicResponse.ok?await publicResponse.json():state.geoSettings;state.managerGeoSettings=managerResponse.ok?await managerResponse.json():state.managerGeoSettings;note('GEO-настройки сохранены');return render();
     }
     const endpoint=type==='application'?'/api/agent-applications':'/api/support-tickets';const body=type==='application'?data:{subject:data.subject,category:data.category,body:data.body};const response=await api(endpoint,{method:'POST',body:JSON.stringify(body)});if(!response.ok)throw new Error(await readError(response));
     if(type==='application'){sessionStorage.removeItem('agent-form');state.form={};await refreshAccount();note(c.applicationSent);go('apply')}else{note(c.ticketSent);go('support')}
