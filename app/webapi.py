@@ -3,7 +3,8 @@ import hmac
 import json
 import os
 import re
-from datetime import datetime, timedelta
+import secrets
+from datetime import datetime, timedelta, timezone
 import time
 from typing import Literal
 from urllib.parse import parse_qsl
@@ -20,6 +21,11 @@ from .storage import (
     ApplicationAuditLog,
     DeletedApplicationAudit,
     GeoAgentSetting,
+    Giveaway,
+    GiveawayAuditLog,
+    GiveawayBroadcast,
+    GiveawayParticipant,
+    GiveawayWinner,
     ManagerAccess,
     ManagerAccessAudit,
     SupportTicket,
@@ -42,6 +48,11 @@ MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
 DOCUMENT_KINDS = {"deposit", "passport", "selfie"}
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 PHONE_RE = re.compile(r"^\+?[0-9][0-9 ()-]{5,23}$")
+
+
+def _utc_naive(value: datetime) -> datetime:
+    """Persist timestamps in the same UTC-naive format as existing tables."""
+    return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
 
 
 def _valid_image(data: bytes, mime_type: str) -> bool:
@@ -325,6 +336,75 @@ class ManagerAccessIn(BaseModel):
         return self
 
 
+class GiveawayCreateIn(BaseModel):
+    title: str = Field(min_length=3, max_length=180)
+    description: str = Field(min_length=3, max_length=5000)
+    prize: str = Field(min_length=2, max_length=300)
+    winner_count: int = Field(ge=1, le=100)
+    entry_deadline: datetime
+    draw_date: datetime
+    geo_codes: list[str] = Field(min_length=1, max_length=50)
+    rules: str = Field(default="", max_length=8000)
+
+    @model_validator(mode="after")
+    def validate_dates_and_geos(self):
+        self.entry_deadline = _utc_naive(self.entry_deadline)
+        self.draw_date = _utc_naive(self.draw_date)
+        self.geo_codes = sorted({code.strip().upper() for code in self.geo_codes if code.strip()})
+        if not self.geo_codes:
+            raise ValueError("Выберите хотя бы один GEO.")
+        if self.draw_date < self.entry_deadline:
+            raise ValueError("Дата проведения не может быть раньше окончания регистрации.")
+        return self
+
+
+class GiveawayUpdateIn(BaseModel):
+    title: str | None = Field(default=None, min_length=3, max_length=180)
+    description: str | None = Field(default=None, min_length=3, max_length=5000)
+    prize: str | None = Field(default=None, min_length=2, max_length=300)
+    winner_count: int | None = Field(default=None, ge=1, le=100)
+    entry_deadline: datetime | None = None
+    draw_date: datetime | None = None
+    geo_codes: list[str] | None = Field(default=None, max_length=50)
+    rules: str | None = Field(default=None, max_length=8000)
+
+    @model_validator(mode="after")
+    def normalize_dates(self):
+        if self.entry_deadline:
+            self.entry_deadline = _utc_naive(self.entry_deadline)
+        if self.draw_date:
+            self.draw_date = _utc_naive(self.draw_date)
+        return self
+
+
+class GiveawayJoinIn(BaseModel):
+    geo_code: str = Field(min_length=2, max_length=16)
+    player_id: str = Field(min_length=3, max_length=80)
+
+    @model_validator(mode="after")
+    def clean_player_id(self):
+        self.geo_code = self.geo_code.strip().upper()
+        self.player_id = self.player_id.strip().replace(" ", "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{3,80}", self.player_id):
+            raise ValueError("Player ID может содержать только буквы, цифры, дефис и подчёркивание.")
+        return self
+
+
+class GiveawayParticipantActionIn(BaseModel):
+    reason: str = Field(min_length=2, max_length=500)
+
+
+class GiveawayLifecycleIn(BaseModel):
+    action: Literal["launch", "close", "cancel"]
+
+
+class GiveawayBroadcastIn(BaseModel):
+    audience: Literal["all_participants", "geo", "winners"]
+    message: str = Field(min_length=2, max_length=4000)
+    geo_codes: list[str] = Field(default_factory=list, max_length=50)
+    button_text: str | None = Field(default=None, max_length=80)
+
+
 def list_geo_settings(user: dict, include_inactive: bool = False) -> list[dict]:
     if include_inactive:
         manager_user(user)
@@ -365,6 +445,533 @@ def update_geo_setting(user: dict, geo_code: str, payload: GeoSettingIn) -> dict
             "minimum_deposit": setting.minimum_deposit,
             "active": setting.active,
         }
+
+
+# Giveaway module -----------------------------------------------------------
+# Kept isolated from applications: a player can participate without being an
+# agent, and all mutations remain protected by the existing manager role.
+def _giveaway_geos(giveaway: Giveaway) -> list[str]:
+    try:
+        value = json.loads(giveaway.geo_codes or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        value = []
+    return [str(code).upper() for code in value if str(code).strip()]
+
+
+def _giveaway_audit(
+    session: Session,
+    giveaway_id: int,
+    actor_id: int,
+    action: str,
+    participant_id: int | None = None,
+    details: dict | None = None,
+) -> None:
+    session.add(GiveawayAuditLog(
+        giveaway_id=giveaway_id,
+        actor_telegram_id=actor_id,
+        action=action,
+        participant_id=participant_id,
+        details=json.dumps(details, ensure_ascii=False)[:5000] if details else None,
+    ))
+
+
+def _participant_payload(
+    participant: GiveawayParticipant,
+    manager: bool = False,
+    owner: bool = False,
+) -> dict:
+    player_id = participant.player_id
+    masked = ("*" * max(0, len(player_id) - 4)) + player_id[-4:]
+    return {
+        "id": participant.id,
+        "participant_number": participant.participant_number,
+        "telegram_id": participant.telegram_id if manager else None,
+        "telegram_username": participant.telegram_username if manager else None,
+        # A participant can see their own Player ID, but public lists always
+        # keep it masked and managers receive it only through protected APIs.
+        "player_id": player_id if manager or owner else masked,
+        "geo_code": participant.geo_code,
+        "status": participant.status,
+        "exclusion_reason": participant.exclusion_reason if manager else None,
+        "excluded_at": participant.excluded_at.isoformat() if participant.excluded_at else None,
+        "joined_at": participant.joined_at.isoformat() if participant.joined_at else None,
+    }
+
+
+def _giveaway_payload(giveaway: Giveaway, session: Session, manager: bool = False) -> dict:
+    participants = session.scalars(select(GiveawayParticipant).where(
+        GiveawayParticipant.giveaway_id == giveaway.id,
+    )).all()
+    winners = session.scalars(select(GiveawayWinner).where(
+        GiveawayWinner.giveaway_id == giveaway.id,
+        GiveawayWinner.status == "active",
+    ).order_by(GiveawayWinner.rank.asc(), GiveawayWinner.id.asc())).all()
+    participant_by_id = {item.id: item for item in participants}
+    active_count = sum(item.status == "active" for item in participants)
+    excluded_count = sum(item.status == "excluded" for item in participants)
+    winner_rows = []
+    for winner in winners:
+        participant = participant_by_id.get(winner.participant_id)
+        if participant:
+            row = {
+                "rank": winner.rank,
+                "selected_at": winner.selected_at.isoformat(),
+                "participant": _participant_payload(participant, manager=manager),
+            }
+            if manager:
+                row["winner_id"] = winner.id
+            winner_rows.append(row)
+    return {
+        "id": giveaway.id,
+        "number": f"GW-{giveaway.id:04d}",
+        "title": giveaway.title,
+        "description": giveaway.description,
+        "prize": giveaway.prize,
+        "winner_count": giveaway.winner_count,
+        "entry_deadline": giveaway.entry_deadline.isoformat(),
+        "draw_date": giveaway.draw_date.isoformat(),
+        "geo_codes": _giveaway_geos(giveaway),
+        "rules": giveaway.rules,
+        "status": giveaway.status,
+        "banner_url": f"/api/giveaways/{giveaway.id}/banner" if giveaway.banner_data else None,
+        "created_at": giveaway.created_at.isoformat(),
+        "updated_at": giveaway.updated_at.isoformat(),
+        "participants_count": len(participants),
+        "active_participants_count": active_count,
+        "excluded_participants_count": excluded_count,
+        "winners": winner_rows,
+        **({"created_by": giveaway.created_by} if manager else {}),
+    }
+
+
+def _get_giveaway(session: Session, giveaway_id: int) -> Giveaway:
+    giveaway = session.get(Giveaway, giveaway_id)
+    if not giveaway:
+        raise HTTPException(404, "Розыгрыш не найден.")
+    return giveaway
+
+
+def active_giveaway(user: dict) -> dict | None:
+    with Session(engine) as session:
+        giveaway = session.scalar(select(Giveaway).where(
+            Giveaway.status == "active",
+        ).order_by(Giveaway.created_at.desc(), Giveaway.id.desc()))
+        return _giveaway_payload(giveaway, session) if giveaway else None
+
+
+def giveaway_participation(user: dict, giveaway_id: int) -> dict | None:
+    with Session(engine) as session:
+        participant = session.scalar(select(GiveawayParticipant).where(
+            GiveawayParticipant.giveaway_id == giveaway_id,
+            GiveawayParticipant.telegram_id == int(user["id"]),
+        ))
+        return _participant_payload(participant, owner=True) if participant else None
+
+
+def join_giveaway(user: dict, giveaway_id: int, payload: GiveawayJoinIn) -> dict:
+    now = datetime.utcnow()
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        if giveaway.status != "active" or giveaway.entry_deadline <= now:
+            raise HTTPException(409, "Регистрация в этом розыгрыше уже закрыта.")
+        if payload.geo_code not in _giveaway_geos(giveaway):
+            raise HTTPException(422, "Выбранный GEO не участвует в этом розыгрыше.")
+        existing = session.scalar(select(GiveawayParticipant).where(
+            GiveawayParticipant.giveaway_id == giveaway.id,
+            GiveawayParticipant.telegram_id == int(user["id"]),
+        ))
+        if existing:
+            raise HTTPException(409, "Вы уже участвуете в текущем розыгрыше.")
+        duplicate = session.scalar(select(GiveawayParticipant).where(
+            GiveawayParticipant.giveaway_id == giveaway.id,
+            GiveawayParticipant.player_id == payload.player_id,
+        ))
+        if duplicate:
+            raise HTTPException(409, "Этот Player ID уже участвует в текущем розыгрыше.")
+        participant = GiveawayParticipant(
+            giveaway_id=giveaway.id,
+            telegram_id=int(user["id"]),
+            telegram_username=(user.get("username") or "").strip().lstrip("@") or None,
+            player_id=payload.player_id,
+            geo_code=payload.geo_code,
+            participant_number="pending",
+        )
+        session.add(participant)
+        session.flush()
+        participant.participant_number = f"#{participant.id:06d}"
+        giveaway.updated_at = now
+        _giveaway_audit(session, giveaway.id, int(user["id"]), "participant_joined", participant.id, {
+            "geo_code": participant.geo_code,
+        })
+        session.commit()
+        session.refresh(participant)
+        return _participant_payload(participant, owner=True)
+
+
+def public_winners(user: dict, giveaway_id: int) -> list[dict]:
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        return _giveaway_payload(giveaway, session)["winners"]
+
+
+def create_giveaway(user: dict, payload: GiveawayCreateIn) -> dict:
+    manager_user(user)
+    now = datetime.utcnow()
+    if payload.entry_deadline <= now:
+        raise HTTPException(422, "Дата окончания регистрации должна быть в будущем.")
+    with Session(engine) as session:
+        giveaway = Giveaway(
+            title=payload.title.strip(),
+            description=payload.description.strip(),
+            prize=payload.prize.strip(),
+            winner_count=payload.winner_count,
+            entry_deadline=payload.entry_deadline,
+            draw_date=payload.draw_date,
+            geo_codes=json.dumps(payload.geo_codes),
+            rules=payload.rules.strip(),
+            created_by=int(user["id"]),
+        )
+        session.add(giveaway)
+        session.flush()
+        _giveaway_audit(session, giveaway.id, int(user["id"]), "created", details={
+            "winner_count": giveaway.winner_count,
+            "geo_codes": payload.geo_codes,
+        })
+        session.commit()
+        session.refresh(giveaway)
+        return _giveaway_payload(giveaway, session, manager=True)
+
+
+def update_giveaway(user: dict, giveaway_id: int, payload: GiveawayUpdateIn) -> dict:
+    manager_user(user)
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        if giveaway.status in {"drawn", "cancelled"}:
+            raise HTTPException(409, "Завершённый розыгрыш редактировать нельзя.")
+        values = payload.model_dump(exclude_unset=True)
+        if "geo_codes" in values and values["geo_codes"] is not None:
+            codes = sorted({code.strip().upper() for code in values["geo_codes"] if code.strip()})
+            if not codes:
+                raise HTTPException(422, "Выберите хотя бы один GEO.")
+            values["geo_codes"] = json.dumps(codes)
+        for field, value in values.items():
+            if isinstance(value, str):
+                value = value.strip()
+            setattr(giveaway, field, value)
+        if giveaway.draw_date < giveaway.entry_deadline:
+            raise HTTPException(422, "Дата проведения не может быть раньше окончания регистрации.")
+        giveaway.updated_at = datetime.utcnow()
+        _giveaway_audit(session, giveaway.id, int(user["id"]), "updated", details={"fields": sorted(values)})
+        session.commit()
+        session.refresh(giveaway)
+        return _giveaway_payload(giveaway, session, manager=True)
+
+
+def manager_giveaways(user: dict) -> list[dict]:
+    manager_user(user)
+    with Session(engine) as session:
+        giveaways = session.scalars(select(Giveaway).order_by(Giveaway.updated_at.desc(), Giveaway.id.desc())).all()
+        return [_giveaway_payload(item, session, manager=True) for item in giveaways]
+
+
+def manager_giveaway(user: dict, giveaway_id: int) -> dict:
+    manager_user(user)
+    with Session(engine) as session:
+        return _giveaway_payload(_get_giveaway(session, giveaway_id), session, manager=True)
+
+
+def giveaway_action(user: dict, giveaway_id: int, action: Literal["launch", "close", "cancel"]) -> dict:
+    manager_user(user)
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        old_status = giveaway.status
+        allowed = {
+            "launch": {"draft"},
+            "close": {"active"},
+            "cancel": {"draft", "active", "closed"},
+        }
+        if giveaway.status not in allowed[action]:
+            raise HTTPException(409, "Это действие сейчас недоступно.")
+        if action == "launch":
+            another_active = session.scalar(select(Giveaway.id).where(
+                Giveaway.status == "active",
+                Giveaway.id != giveaway.id,
+            ))
+            if another_active:
+                raise HTTPException(409, "Сначала закройте или отмените текущий активный розыгрыш.")
+        giveaway.status = {"launch": "active", "close": "closed", "cancel": "cancelled"}[action]
+        giveaway.updated_at = datetime.utcnow()
+        _giveaway_audit(session, giveaway.id, int(user["id"]), action, details={"from": old_status, "to": giveaway.status})
+        session.commit()
+        session.refresh(giveaway)
+        return _giveaway_payload(giveaway, session, manager=True)
+
+
+def list_giveaway_participants(
+    user: dict,
+    giveaway_id: int,
+    status: str | None = None,
+    geo_code: str | None = None,
+    query: str | None = None,
+) -> dict:
+    manager_user(user)
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        statement = select(GiveawayParticipant).where(GiveawayParticipant.giveaway_id == giveaway.id)
+        if status:
+            statement = statement.where(GiveawayParticipant.status == status)
+        if geo_code:
+            statement = statement.where(GiveawayParticipant.geo_code == geo_code.strip().upper())
+        if query:
+            cleaned = query.strip().lstrip("#")
+            statement = statement.where(or_(
+                GiveawayParticipant.player_id.ilike(f"%{cleaned}%"),
+                GiveawayParticipant.participant_number.ilike(f"%{cleaned}%"),
+                GiveawayParticipant.telegram_username.ilike(f"%{cleaned.lstrip('@')}%"),
+            ))
+        participants = session.scalars(statement.order_by(
+            GiveawayParticipant.joined_at.desc(), GiveawayParticipant.id.desc(),
+        ).limit(250)).all()
+        all_participants = session.scalars(select(GiveawayParticipant).where(
+            GiveawayParticipant.giveaway_id == giveaway.id,
+        )).all()
+        by_geo: dict[str, int] = {}
+        for item in all_participants:
+            by_geo[item.geo_code] = by_geo.get(item.geo_code, 0) + 1
+        return {
+            "total": len(all_participants),
+            "by_geo": by_geo,
+            "participants": [_participant_payload(item, manager=True) for item in participants],
+        }
+
+
+def set_participant_excluded(user: dict, giveaway_id: int, participant_id: int, payload: GiveawayParticipantActionIn) -> dict:
+    manager_user(user)
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        participant = session.get(GiveawayParticipant, participant_id)
+        if not participant or participant.giveaway_id != giveaway.id:
+            raise HTTPException(404, "Участник не найден.")
+        if participant.status == "winner":
+            raise HTTPException(409, "Победителя нельзя исключить. Используйте перевыбор.")
+        if participant.status == "excluded":
+            raise HTTPException(409, "Участник уже исключён.")
+        participant.status = "excluded"
+        participant.exclusion_reason = payload.reason.strip()
+        participant.excluded_by = int(user["id"])
+        participant.excluded_at = datetime.utcnow()
+        participant.updated_at = datetime.utcnow()
+        _giveaway_audit(session, giveaway.id, int(user["id"]), "participant_excluded", participant.id, {"reason": participant.exclusion_reason})
+        session.commit()
+        return _participant_payload(participant, manager=True)
+
+
+def restore_participant(user: dict, giveaway_id: int, participant_id: int) -> dict:
+    manager_user(user)
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        participant = session.get(GiveawayParticipant, participant_id)
+        if not participant or participant.giveaway_id != giveaway.id:
+            raise HTTPException(404, "Участник не найден.")
+        if participant.status != "excluded":
+            raise HTTPException(409, "Вернуть можно только исключённого участника.")
+        participant.status = "active"
+        participant.exclusion_reason = None
+        participant.excluded_by = None
+        participant.excluded_at = None
+        participant.updated_at = datetime.utcnow()
+        _giveaway_audit(session, giveaway.id, int(user["id"]), "participant_restored", participant.id)
+        session.commit()
+        return _participant_payload(participant, manager=True)
+
+
+def draw_giveaway(user: dict, giveaway_id: int) -> dict:
+    """Atomically choose unique winners only from active participants."""
+    manager_user(user)
+    actor_id = int(user["id"])
+    with Session(engine) as session:
+        statement = select(Giveaway).where(Giveaway.id == giveaway_id)
+        if engine.dialect.name == "postgresql":
+            statement = statement.with_for_update()
+        giveaway = session.scalar(statement)
+        if not giveaway:
+            raise HTTPException(404, "Розыгрыш не найден.")
+        if giveaway.status not in {"active", "closed"}:
+            raise HTTPException(409, "Провести розыгрыш можно только для активного или закрытого события.")
+        existing = session.scalar(select(GiveawayWinner.id).where(
+            GiveawayWinner.giveaway_id == giveaway.id,
+            GiveawayWinner.status == "active",
+        ))
+        if existing:
+            raise HTTPException(409, "Победители уже выбраны.")
+        candidates = session.scalars(select(GiveawayParticipant).where(
+            GiveawayParticipant.giveaway_id == giveaway.id,
+            GiveawayParticipant.status == "active",
+        )).all()
+        if len(candidates) < giveaway.winner_count:
+            raise HTTPException(422, "Недостаточно валидных участников для выбора победителей.")
+        selected = secrets.SystemRandom().sample(candidates, giveaway.winner_count)
+        for rank, participant in enumerate(selected, start=1):
+            participant.status = "winner"
+            participant.updated_at = datetime.utcnow()
+            session.add(GiveawayWinner(
+                giveaway_id=giveaway.id,
+                participant_id=participant.id,
+                rank=rank,
+                selected_by=actor_id,
+            ))
+        giveaway.status = "drawn"
+        giveaway.updated_at = datetime.utcnow()
+        _giveaway_audit(session, giveaway.id, actor_id, "draw_completed", details={
+            "winner_count": len(selected),
+            "participant_ids": [item.id for item in selected],
+        })
+        session.commit()
+        session.refresh(giveaway)
+        return _giveaway_payload(giveaway, session, manager=True)
+
+
+def replace_giveaway_winner(user: dict, giveaway_id: int, winner_id: int, payload: GiveawayParticipantActionIn) -> dict:
+    manager_user(user)
+    actor_id = int(user["id"])
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        if giveaway.status != "drawn":
+            raise HTTPException(409, "Перевыбор доступен после проведения розыгрыша.")
+        old = session.get(GiveawayWinner, winner_id)
+        if not old or old.giveaway_id != giveaway.id or old.status != "active":
+            raise HTTPException(404, "Победитель не найден.")
+        candidates = session.scalars(select(GiveawayParticipant).where(
+            GiveawayParticipant.giveaway_id == giveaway.id,
+            GiveawayParticipant.status == "active",
+        )).all()
+        if not candidates:
+            raise HTTPException(422, "Нет участника для перевыбора.")
+        new_participant = secrets.choice(candidates)
+        old_participant = session.get(GiveawayParticipant, old.participant_id)
+        old.status = "replaced"
+        old.replacement_reason = payload.reason.strip()
+        if old_participant:
+            old_participant.status = "excluded"
+            old_participant.exclusion_reason = "Заменён при перевыборе победителя"
+            old_participant.excluded_by = actor_id
+            old_participant.excluded_at = datetime.utcnow()
+        new_participant.status = "winner"
+        session.add(GiveawayWinner(
+            giveaway_id=giveaway.id,
+            participant_id=new_participant.id,
+            rank=old.rank,
+            selected_by=actor_id,
+            replacement_reason=payload.reason.strip(),
+        ))
+        _giveaway_audit(session, giveaway.id, actor_id, "winner_replaced", new_participant.id, {
+            "old_winner_id": old.id,
+            "reason": payload.reason.strip(),
+        })
+        session.commit()
+        session.refresh(giveaway)
+        return _giveaway_payload(giveaway, session, manager=True)
+
+
+def create_giveaway_broadcast(user: dict, giveaway_id: int, payload: GiveawayBroadcastIn) -> dict:
+    manager_user(user)
+    actor_id = int(user["id"])
+    geo_codes = sorted({code.strip().upper() for code in payload.geo_codes if code.strip()})
+    if payload.audience == "geo" and not geo_codes:
+        raise HTTPException(422, "Для рассылки по GEO выберите страны.")
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        statement = select(GiveawayParticipant.telegram_id).where(GiveawayParticipant.giveaway_id == giveaway.id)
+        if payload.audience == "winners":
+            statement = statement.join(GiveawayWinner, GiveawayWinner.participant_id == GiveawayParticipant.id).where(
+                GiveawayWinner.status == "active",
+            )
+        else:
+            statement = statement.where(GiveawayParticipant.status.in_(["active", "winner"]))
+            if payload.audience == "geo":
+                statement = statement.where(GiveawayParticipant.geo_code.in_(geo_codes))
+        recipients = list(dict.fromkeys(session.scalars(statement).all()))
+        broadcast = GiveawayBroadcast(
+            giveaway_id=giveaway.id,
+            actor_telegram_id=actor_id,
+            audience=payload.audience,
+            geo_codes=json.dumps(geo_codes),
+            message=payload.message.strip(),
+            button_text=(payload.button_text or "").strip() or None,
+            status="sending",
+        )
+        session.add(broadcast)
+        session.flush()
+        _giveaway_audit(session, giveaway.id, actor_id, "broadcast_started", details={
+            "broadcast_id": broadcast.id,
+            "audience": payload.audience,
+            "recipient_count": len(recipients),
+        })
+        session.commit()
+        return {
+            "broadcast_id": broadcast.id,
+            "recipients": recipients,
+            "message": broadcast.message,
+            "button_text": broadcast.button_text,
+        }
+
+
+def complete_giveaway_broadcast(broadcast_id: int, sent_count: int, failed_count: int) -> None:
+    with Session(engine) as session:
+        broadcast = session.get(GiveawayBroadcast, broadcast_id)
+        if not broadcast:
+            return
+        broadcast.sent_count = sent_count
+        broadcast.failed_count = failed_count
+        broadcast.status = "sent" if not failed_count else "completed_with_errors"
+        broadcast.completed_at = datetime.utcnow()
+        _giveaway_audit(session, broadcast.giveaway_id or 0, broadcast.actor_telegram_id, "broadcast_completed", details={
+            "broadcast_id": broadcast.id,
+            "sent": sent_count,
+            "failed": failed_count,
+        })
+        session.commit()
+
+
+def giveaway_history(user: dict, giveaway_id: int) -> list[dict]:
+    manager_user(user)
+    with Session(engine) as session:
+        _get_giveaway(session, giveaway_id)
+        rows = session.scalars(select(GiveawayAuditLog).where(
+            GiveawayAuditLog.giveaway_id == giveaway_id,
+        ).order_by(GiveawayAuditLog.created_at.desc(), GiveawayAuditLog.id.desc())).all()
+        return [{
+            "action": item.action,
+            "actor_telegram_id": item.actor_telegram_id,
+            "participant_id": item.participant_id,
+            "details": item.details,
+            "created_at": item.created_at.isoformat(),
+        } for item in rows]
+
+
+def save_giveaway_banner(user: dict, giveaway_id: int, filename: str, mime_type: str, data: bytes) -> dict:
+    manager_user(user)
+    if mime_type not in IMAGE_TYPES or not data or len(data) > MAX_DOCUMENT_BYTES or not _valid_image(data, mime_type):
+        raise HTTPException(415, "Загрузите корректное изображение JPG, PNG или WEBP до 8 МБ.")
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        if giveaway.status in {"drawn", "cancelled"}:
+            raise HTTPException(409, "Для завершённого розыгрыша баннер менять нельзя.")
+        giveaway.banner_filename = re.sub(r"[^a-zA-Z0-9._-]", "_", filename or "giveaway.jpg")[:255]
+        giveaway.banner_mime_type = mime_type
+        giveaway.banner_data = data
+        giveaway.updated_at = datetime.utcnow()
+        _giveaway_audit(session, giveaway.id, int(user["id"]), "banner_uploaded")
+        session.commit()
+        return {"uploaded": True, "banner_url": f"/api/giveaways/{giveaway.id}/banner"}
+
+
+def load_giveaway_banner(giveaway_id: int) -> tuple[bytes, str, str]:
+    with Session(engine) as session:
+        giveaway = _get_giveaway(session, giveaway_id)
+        if not giveaway.banner_data or not giveaway.banner_mime_type:
+            raise HTTPException(404, "Баннер не добавлен.")
+        return giveaway.banner_data, giveaway.banner_mime_type, giveaway.banner_filename or "giveaway.jpg"
 
 
 def list_manager_access(user: dict) -> list[dict]:

@@ -21,6 +21,8 @@ const paths = {
   download: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>',
   close: '<path d="m6 6 12 12M18 6 6 18"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/>',
+  gift: '<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8H7.5A2.5 2.5 0 1 1 10 5.5C10 7 12 8 12 8Zm0 0h4.5A2.5 2.5 0 1 0 14 5.5C14 7 12 8 12 8Z"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0Z"/><path d="M8 6H5v1a4 4 0 0 0 4 4M16 6h3v1a4 4 0 0 1-4 4M12 13v4M8 21h8M9 17h6"/>',
   bolt: '<path d="m13 2-9 12h7l-1 8 10-13h-7z"/>',
   play: '<path d="m8 5 11 7-11 7Z"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',

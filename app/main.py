@@ -5,6 +5,7 @@ from pathlib import Path
 
 import uvicorn
 from aiogram import Bot, Dispatcher
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramNetworkError, TelegramRetryAfter
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     BotCommand,
@@ -14,7 +15,7 @@ from aiogram.types import (
     Message,
     WebAppInfo,
 )
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from .storage import init_storage, save_telegram_user
@@ -27,29 +28,54 @@ from .webapi import (
     ManagerActionIn,
     ManagerAccessIn,
     GeoSettingIn,
+    GiveawayBroadcastIn,
+    GiveawayCreateIn,
+    GiveawayJoinIn,
+    GiveawayLifecycleIn,
+    GiveawayParticipantActionIn,
+    GiveawayUpdateIn,
     SubmitProfileIn,
     TicketIn,
     check_contact,
     check_manager,
+    active_giveaway,
+    complete_giveaway_broadcast,
+    create_giveaway,
+    create_giveaway_broadcast,
     current_user,
+    draw_giveaway,
+    giveaway_action,
+    giveaway_history,
+    giveaway_participation,
     load_document,
+    load_giveaway_banner,
     list_manager_access,
     list_geo_settings,
     grant_manager_access,
     delete_manager_application,
     manager_application_action,
     manager_applications,
+    manager_giveaway,
+    manager_giveaways,
     mark_deposit,
     profile_payload,
+    public_winners,
     remove_document,
     revoke_manager_access,
+    restore_participant,
     save_application_draft,
     save_document,
+    save_giveaway_banner,
     start_account,
     submit_application,
     submit_profile,
     submit_ticket,
+    set_participant_excluded,
     update_geo_setting,
+    update_giveaway,
+    join_giveaway,
+    list_giveaway_participants,
+    replace_giveaway_winner,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -168,6 +194,144 @@ async def get_manager_document(application_id: int, kind: str, user: dict = Depe
         "Cache-Control": "no-store, private",
         "Content-Disposition": f'inline; filename="{filename.replace(chr(34), "")}"',
     })
+
+
+@api.get("/api/giveaways/active")
+async def get_active_giveaway(user: dict = Depends(current_user)):
+    return active_giveaway(user)
+
+
+@api.get("/api/giveaways/{giveaway_id}/participation")
+async def get_giveaway_participation(giveaway_id: int, user: dict = Depends(current_user)):
+    return giveaway_participation(user, giveaway_id)
+
+
+@api.post("/api/giveaways/{giveaway_id}/participation")
+async def create_giveaway_participation(giveaway_id: int, payload: GiveawayJoinIn, user: dict = Depends(current_user)):
+    return join_giveaway(user, giveaway_id, payload)
+
+
+@api.get("/api/giveaways/{giveaway_id}/winners")
+async def get_giveaway_winners(giveaway_id: int, user: dict = Depends(current_user)):
+    return public_winners(user, giveaway_id)
+
+
+@api.get("/api/giveaways/{giveaway_id}/banner")
+async def get_giveaway_banner(giveaway_id: int):
+    data, mime_type, filename = load_giveaway_banner(giveaway_id)
+    return Response(data, media_type=mime_type, headers={
+        "Cache-Control": "public, max-age=3600",
+        "Content-Disposition": f'inline; filename="{filename.replace(chr(34), "")}"',
+    })
+
+
+@api.get("/api/manager/giveaways")
+async def get_manager_giveaways(user: dict = Depends(current_user)):
+    return manager_giveaways(user)
+
+
+@api.post("/api/manager/giveaways")
+async def create_manager_giveaway(payload: GiveawayCreateIn, user: dict = Depends(current_user)):
+    return create_giveaway(user, payload)
+
+
+@api.get("/api/manager/giveaways/{giveaway_id}")
+async def get_manager_giveaway(giveaway_id: int, user: dict = Depends(current_user)):
+    return manager_giveaway(user, giveaway_id)
+
+
+@api.patch("/api/manager/giveaways/{giveaway_id}")
+async def patch_manager_giveaway(giveaway_id: int, payload: GiveawayUpdateIn, user: dict = Depends(current_user)):
+    return update_giveaway(user, giveaway_id, payload)
+
+
+@api.post("/api/manager/giveaways/{giveaway_id}/action")
+async def manager_giveaway_action(giveaway_id: int, payload: GiveawayLifecycleIn, user: dict = Depends(current_user)):
+    return giveaway_action(user, giveaway_id, payload.action)
+
+
+@api.post("/api/manager/giveaways/{giveaway_id}/banner")
+async def upload_giveaway_banner(giveaway_id: int, banner: UploadFile = File(...), user: dict = Depends(current_user)):
+    data = await banner.read(8 * 1024 * 1024 + 1)
+    return save_giveaway_banner(user, giveaway_id, banner.filename or "giveaway.jpg", banner.content_type or "", data)
+
+
+@api.get("/api/manager/giveaways/{giveaway_id}/participants")
+async def get_giveaway_participants(
+    giveaway_id: int,
+    status: str | None = Query(default=None, max_length=24),
+    geo_code: str | None = Query(default=None, max_length=16),
+    query: str | None = Query(default=None, max_length=100),
+    user: dict = Depends(current_user),
+):
+    return list_giveaway_participants(user, giveaway_id, status=status, geo_code=geo_code, query=query)
+
+
+@api.post("/api/manager/giveaways/{giveaway_id}/participants/{participant_id}/exclude")
+async def exclude_giveaway_participant(giveaway_id: int, participant_id: int, payload: GiveawayParticipantActionIn, user: dict = Depends(current_user)):
+    return set_participant_excluded(user, giveaway_id, participant_id, payload)
+
+
+@api.post("/api/manager/giveaways/{giveaway_id}/participants/{participant_id}/restore")
+async def restore_giveaway_participant(giveaway_id: int, participant_id: int, user: dict = Depends(current_user)):
+    return restore_participant(user, giveaway_id, participant_id)
+
+
+@api.post("/api/manager/giveaways/{giveaway_id}/draw")
+async def run_giveaway_draw(giveaway_id: int, user: dict = Depends(current_user)):
+    return draw_giveaway(user, giveaway_id)
+
+
+@api.post("/api/manager/giveaways/{giveaway_id}/winners/{winner_id}/replace")
+async def replace_winner(giveaway_id: int, winner_id: int, payload: GiveawayParticipantActionIn, user: dict = Depends(current_user)):
+    return replace_giveaway_winner(user, giveaway_id, winner_id, payload)
+
+
+@api.get("/api/manager/giveaways/{giveaway_id}/history")
+async def get_giveaway_history(giveaway_id: int, user: dict = Depends(current_user)):
+    return giveaway_history(user, giveaway_id)
+
+
+async def send_giveaway_broadcast(broadcast: dict, giveaway_id: int) -> dict:
+    """Respect Telegram limits: each user gets at most one attempted delivery."""
+    bot = Bot(TOKEN)
+    sent = failed = 0
+    markup = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text=broadcast["button_text"],
+            web_app=WebAppInfo(url=f"{PUBLIC_APP_URL}?giveaway={giveaway_id}"),
+        )
+    ]]) if broadcast.get("button_text") else None
+    try:
+        for recipient in broadcast["recipients"]:
+            delivered = False
+            for attempt in range(2):
+                try:
+                    await bot.send_message(recipient, broadcast["message"], reply_markup=markup)
+                    delivered = True
+                    break
+                except TelegramRetryAfter as error:
+                    if attempt == 0:
+                        await asyncio.sleep(float(error.retry_after))
+                        continue
+                except (TelegramForbiddenError, TelegramBadRequest, TelegramNetworkError):
+                    break
+            if delivered:
+                sent += 1
+                await asyncio.sleep(0.05)
+            else:
+                failed += 1
+    finally:
+        await bot.session.close()
+    complete_giveaway_broadcast(broadcast["broadcast_id"], sent, failed)
+    return {"sent": sent, "failed": failed}
+
+
+@api.post("/api/manager/giveaways/{giveaway_id}/broadcast")
+async def broadcast_giveaway(giveaway_id: int, payload: GiveawayBroadcastIn, user: dict = Depends(current_user)):
+    broadcast = create_giveaway_broadcast(user, giveaway_id, payload)
+    result = await send_giveaway_broadcast(broadcast, giveaway_id)
+    return {"recipients": len(broadcast["recipients"]), **result}
 
 
 @api.get("/api/superadmin/managers")

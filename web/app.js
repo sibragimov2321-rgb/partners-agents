@@ -1,7 +1,9 @@
-import { esc, icon } from './ui.js?v=20260821-7';
-import * as screens from './screens.js?v=20260821-5';
+import { esc, icon } from './ui.js?v=20260826-1';
+import * as screens from './screens.js?v=20260826-1';
 import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-7';
+import { renderGiveaway, renderGiveawayCreate, renderGiveawayManager, renderGiveawayManagerDetail, renderGiveawayWinners, renderMyGiveaway } from './giveaways.js?v=20260826-1';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
+const giveawayFromUrl=new URLSearchParams(window.location.search).get('giveaway');
 const supportsBack=Boolean(tg?.isVersionAtLeast?.('6.1'));
 const supportsHaptics=Boolean(tg?.isVersionAtLeast?.('6.1'));
 const header=document.querySelector('#header'),content=document.querySelector('#content'),bottomNav=document.querySelector('#bottomNav'),toast=document.querySelector('#toast');
@@ -21,15 +23,15 @@ const savedLanguage=localStorage.getItem('partners-language');
 const telegramLanguage=(tg?.initDataUnsafe?.user?.language_code||'ru').toLowerCase().split('-')[0];
 const supportedLanguages=new Set(languageOptions.map(item=>item[0]));
 const initialLanguage=supportedLanguages.has(savedLanguage)?savedLanguage:(supportedLanguages.has(telegramLanguage)?telegramLanguage:'ru');
-const state={view:'home',account:null,loading:true,lang:initialLanguage,form:JSON.parse(sessionStorage.getItem('agent-form')||'{}'),agentStep:Number(localStorage.getItem('agent-step')||0),managerApps:[],managerFilter:'all',managers:[],geoSettings:[],managerGeoSettings:[],registrationStarted:false,justSubmitted:false,forceApplication:false};
+const state={view:'home',account:null,loading:true,lang:initialLanguage,form:JSON.parse(sessionStorage.getItem('agent-form')||'{}'),agentStep:Number(localStorage.getItem('agent-step')||0),managerApps:[],managerFilter:'all',managers:[],geoSettings:[],managerGeoSettings:[],registrationStarted:false,justSubmitted:false,forceApplication:false,giveaway:null,giveawayParticipation:null,giveawayStage:'view',giveawayDraft:{},managerGiveaways:[],managerGiveaway:null,managerParticipants:{},managerGiveawayHistory:[]};
 const words=()=>languageCopy[state.lang]||languageCopy.ru;
 const api=(path,options={})=>{const isForm=options.body instanceof FormData;return fetch(path,{...options,headers:{...(!isForm?{'Content-Type':'application/json'}:{}),'X-Telegram-Init-Data':tg?.initData||'',...(options.headers||{})}})};
 const confirmAction=message=>new Promise(resolve=>typeof tg?.showConfirm==='function'?tg.showConfirm(message,resolve):resolve(window.confirm(message)));
 function note(text){toast.textContent=text;toast.classList.add('show');clearTimeout(note.t);note.t=setTimeout(()=>toast.classList.remove('show'),2600)}
 function headerView(){const c=words(),selected=languageOptions.find(item=>item[0]===state.lang)||languageOptions[0];const options=languageOptions.map(([code,label,name])=>`<button class="${state.lang===code?'active':''}" data-language="${code}"><b>${label}</b><span>${name}</span></button>`).join('');header.innerHTML=`<div class="language-picker"><button class="language-trigger" data-language-toggle aria-label="Language">${icon('globe')}<b>${selected[1]}</b></button><div class="language-menu" hidden>${options}</div></div><div class="portal-title"><b>Partners <span>Agent</span></b><small>${c.subtitle}</small></div><button class="header-avatar" data-nav="profile">${esc((state.account?.telegram?.first_name||'P')[0])}</button>`}
-function render(){const c=words();const routes={home:()=>screens.home(state.account,state.lang),stats:()=>screens.stats(state.account,state.lang),profile:()=>screens.profile(state.account,state.lang),manager:()=>renderManager(state.managerApps,state.managerFilter),managers:()=>renderManagerAccess(state.managers,state.managerGeoSettings),agents:()=>screens.agents(state.account,state.lang),partners:screens.partners,banners:screens.banners,agent_lookup:()=>screens.lookup('agent',state.lang),manager_lookup:()=>screens.lookup('manager',state.lang),faq:screens.faq,apply:()=>renderOnboarding(state.account,state.agentStep,state.registrationStarted,state.geoSettings,state.justSubmitted,state.forceApplication),check:()=>screens.check(state.account,state.lang),instructions:screens.instructions,support:()=>screens.support(state.lang),ticket:()=>screens.ticket(state.lang)};const nav=[['home',c.home,'home'],['stats',c.stats,'chart'],['profile',c.profile,'user']];headerView();content.innerHTML=state.loading?screens.loading():(routes[state.view]||routes.home)();bottomNav.innerHTML=nav.map(([v,l,i])=>`<button class="nav-item ${state.view===v?'active':''}" data-nav="${v}">${icon(i)}<span>${l}</span></button>`).join('');hydrateDocuments();updateGeoCondition(content.querySelector('select[name="country"]'));if(supportsBack)state.view==='home'?tg.BackButton.hide():tg.BackButton.show()}
+function render(){const c=words();const routes={home:()=>screens.home(state.account,state.lang),stats:()=>screens.stats(state.account,state.lang),profile:()=>screens.profile(state.account,state.lang),manager:()=>renderManager(state.managerApps,state.managerFilter),managers:()=>renderManagerAccess(state.managers,state.managerGeoSettings),agents:()=>screens.agents(state.account,state.lang),partners:screens.partners,banners:screens.banners,agent_lookup:()=>screens.lookup('agent',state.lang),manager_lookup:()=>screens.lookup('manager',state.lang),faq:screens.faq,apply:()=>renderOnboarding(state.account,state.agentStep,state.registrationStarted,state.geoSettings,state.justSubmitted,state.forceApplication),check:()=>screens.check(state.account,state.lang),instructions:screens.instructions,support:()=>screens.support(state.lang),ticket:()=>screens.ticket(state.lang),giveaway:()=>renderGiveaway(state.giveaway,state.giveawayParticipation,state.geoSettings,state.giveawayStage,state.giveawayDraft),giveaway_mine:()=>renderMyGiveaway(state.giveaway,state.giveawayParticipation,state.geoSettings),giveaway_winners:()=>renderGiveawayWinners(state.giveaway),manager_giveaways:()=>renderGiveawayManager(state.managerGiveaways,state.geoSettings),manager_giveaway_create:()=>renderGiveawayCreate(state.geoSettings),manager_giveaway_edit:()=>renderGiveawayCreate(state.geoSettings,state.managerGiveaway),manager_giveaway:()=>renderGiveawayManagerDetail(state.managerGiveaway,state.managerParticipants,state.managerGiveawayHistory,state.geoSettings)};const nav=[['home',c.home,'home'],['stats',c.stats,'chart'],['profile',c.profile,'user']];headerView();content.innerHTML=state.loading?screens.loading():(routes[state.view]||routes.home)();bottomNav.innerHTML=nav.map(([v,l,i])=>`<button class="nav-item ${state.view===v?'active':''}" data-nav="${v}">${icon(i)}<span>${l}</span></button>`).join('');hydrateDocuments();updateGeoCondition(content.querySelector('select[name="country"]'));if(supportsBack)state.view==='home'?tg.BackButton.hide():tg.BackButton.show()}
 function go(view){state.view=view;if(supportsHaptics)tg.HapticFeedback.impactOccurred('light');render();scrollTo({top:0,behavior:'smooth'})}
-async function load(){try{const [meResponse,geoResponse]=await Promise.all([api('/api/me'),api('/api/geo-settings')]);if(meResponse.ok)state.account=await meResponse.json();if(geoResponse.ok)state.geoSettings=await geoResponse.json()}catch{}finally{state.loading=false;render()}}
+async function load(){try{const [meResponse,geoResponse,giveawayResponse]=await Promise.all([api('/api/me'),api('/api/geo-settings'),api('/api/giveaways/active')]);if(meResponse.ok)state.account=await meResponse.json();if(geoResponse.ok)state.geoSettings=await geoResponse.json();if(giveawayResponse.ok){state.giveaway=await giveawayResponse.json();if(state.giveaway){const participation=await api(`/api/giveaways/${state.giveaway.id}/participation`);state.giveawayParticipation=participation.ok?await participation.json():null;if(String(state.giveaway.id)===giveawayFromUrl)state.view='giveaway'}}}catch{}finally{state.loading=false;render()}}
 async function readError(response){try{const data=await response.json();const detail=data.detail;return Array.isArray(detail)?detail.map(x=>x.msg).join(' · '):(detail||words().error)}catch{return words().error}}
 function agentLookupResult(result){
   if(result.verified&&result.agent){const a=result.agent,date=a.connected_at?new Date(a.connected_at).toLocaleDateString(state.lang==='ru'?'ru-RU':'en-GB'):'—';return `<article class="verified-agent-card"><header><i>${icon('check')}</i><div><span>✓ VERIFIED AGENT</span><h3>${esc(a.name||'Agent')}</h3></div></header><dl><dt>Agent ID</dt><dd>${esc(a.agent_id)}</dd><dt>${state.lang==='ru'?'Страна':'Country'}</dt><dd>${esc(a.country||'—')}</dd><dt>${state.lang==='ru'?'Город':'City'}</dt><dd>${esc(a.city||'—')}</dd><dt>${state.lang==='ru'?'Статус':'Status'}</dt><dd>${state.lang==='ru'?'Подтверждён':'Verified'}</dd><dt>${state.lang==='ru'?'Подключён':'Connected'}</dt><dd>${date}</dd></dl></article>`}
@@ -54,6 +56,45 @@ document.addEventListener('click',async e=>{
   const languageToggle=e.target.closest('[data-language-toggle]');
   if(languageToggle){const menu=header.querySelector('.language-menu');menu.hidden=!menu.hidden;return}
   const menu=header.querySelector('.language-menu');if(menu&&!e.target.closest('.language-picker'))menu.hidden=true;
+  const giveawayStage=e.target.closest('[data-giveaway-stage]');
+  if(giveawayStage){state.giveawayStage=giveawayStage.dataset.giveawayStage;return render()}
+  const giveawayMine=e.target.closest('[data-giveaway-mine]');
+  if(giveawayMine)return go('giveaway_mine');
+  const giveawayWinners=e.target.closest('[data-giveaway-winners]');
+  if(giveawayWinners)return go('giveaway_winners');
+  const giveawayRules=e.target.closest('[data-giveaway-rules]');
+  if(giveawayRules){content.querySelector('[data-giveaway-rules-box]')?.setAttribute('open','');content.querySelector('[data-giveaway-rules-box]')?.scrollIntoView({behavior:'smooth',block:'center'});return}
+  const confirmGiveawayJoin=e.target.closest('[data-confirm-giveaway-join]');
+  if(confirmGiveawayJoin){
+    confirmGiveawayJoin.disabled=true;const response=await api(`/api/giveaways/${state.giveaway.id}/participation`,{method:'POST',body:JSON.stringify(state.giveawayDraft)});
+    if(!response.ok){confirmGiveawayJoin.disabled=false;return note(await readError(response))}
+    state.giveawayParticipation=await response.json();state.giveawayStage='view';note('🎉 Вы успешно зарегистрированы!');return go('giveaway_mine');
+  }
+  const openGiveaway=e.target.closest('[data-giveaway-open]');
+  if(openGiveaway){
+    const id=openGiveaway.dataset.giveawayOpen;const [detail,participants,history]=await Promise.all([api(`/api/manager/giveaways/${id}`),api(`/api/manager/giveaways/${id}/participants`),api(`/api/manager/giveaways/${id}/history`)]);
+    if(!detail.ok)return note(await readError(detail));state.managerGiveaway=await detail.json();state.managerParticipants=participants.ok?await participants.json():{};state.managerGiveawayHistory=history.ok?await history.json():[];return go('manager_giveaway');
+  }
+  const managerGiveawayAction=e.target.closest('[data-giveaway-manager-action]');
+  if(managerGiveawayAction){
+    const action=managerGiveawayAction.dataset.giveawayManagerAction;const labels={launch:'Запустить этот розыгрыш?',close:'Закрыть регистрацию?',cancel:'Отменить розыгрыш?'};
+    if(!await confirmAction(labels[action]||'Подтвердить действие?'))return;managerGiveawayAction.disabled=true;
+    const response=await api(`/api/manager/giveaways/${managerGiveawayAction.dataset.giveawayId}/action`,{method:'POST',body:JSON.stringify({action})});
+    if(!response.ok){managerGiveawayAction.disabled=false;return note(await readError(response))}state.managerGiveaway=await response.json();const list=await api('/api/manager/giveaways');if(list.ok)state.managerGiveaways=await list.json();note('Статус розыгрыша обновлён');return render();
+  }
+  const drawGiveaway=e.target.closest('[data-giveaway-draw]');
+  if(drawGiveaway){
+    if(!await confirmAction(`Выбрать ${state.managerGiveaway?.winner_count||0} победителей случайным образом? Действие нельзя отменить без перевыбора.`))return;drawGiveaway.disabled=true;
+    const response=await api(`/api/manager/giveaways/${drawGiveaway.dataset.giveawayDraw}/draw`,{method:'POST'});if(!response.ok){drawGiveaway.disabled=false;return note(await readError(response))}state.managerGiveaway=await response.json();const list=await api('/api/manager/giveaways');if(list.ok)state.managerGiveaways=await list.json();note('🏆 Победители выбраны');return render();
+  }
+  const excludeParticipant=e.target.closest('[data-giveaway-exclude]');
+  if(excludeParticipant){const reason=window.prompt('Причина исключения участника:');if(!reason?.trim())return;excludeParticipant.disabled=true;const response=await api(`/api/manager/giveaways/${state.managerGiveaway.id}/participants/${excludeParticipant.dataset.giveawayExclude}/exclude`,{method:'POST',body:JSON.stringify({reason})});if(!response.ok){excludeParticipant.disabled=false;return note(await readError(response))}const list=await api(`/api/manager/giveaways/${state.managerGiveaway.id}/participants`);state.managerParticipants=list.ok?await list.json():state.managerParticipants;note('Участник исключён');return render()}
+  const restoreParticipant=e.target.closest('[data-giveaway-restore]');
+  if(restoreParticipant){restoreParticipant.disabled=true;const response=await api(`/api/manager/giveaways/${state.managerGiveaway.id}/participants/${restoreParticipant.dataset.giveawayRestore}/restore`,{method:'POST'});if(!response.ok){restoreParticipant.disabled=false;return note(await readError(response))}const list=await api(`/api/manager/giveaways/${state.managerGiveaway.id}/participants`);state.managerParticipants=list.ok?await list.json():state.managerParticipants;note('Участник возвращён');return render()}
+  const editGiveaway=e.target.closest('[data-giveaway-edit]');
+  if(editGiveaway)return go('manager_giveaway_edit');
+  const replaceWinner=e.target.closest('[data-giveaway-replace]');
+  if(replaceWinner){const reason=window.prompt('Причина перевыбора победителя:');if(!reason?.trim())return;const response=await api(`/api/manager/giveaways/${replaceWinner.dataset.giveawayId}/winners/${replaceWinner.dataset.giveawayReplace}/replace`,{method:'POST',body:JSON.stringify({reason})});if(!response.ok)return note(await readError(response));state.managerGiveaway=await response.json();note('Победитель заменён');return render()}
   const startRegistration=e.target.closest('[data-start-registration]');
   if(startRegistration){state.registrationStarted=true;state.agentStep=0;state.forceApplication=false;localStorage.setItem('agent-step','0');return render()}
   const showApplication=e.target.closest('[data-show-application]');
@@ -93,7 +134,7 @@ document.addEventListener('click',async e=>{
     flow.disabled=false;return;
   }
   const target=e.target.closest('[data-nav]');
-  if(target){if(target.dataset.nav==='apply'){state.forceApplication=false;state.justSubmitted=false;state.registrationStarted=false}if(target.dataset.nav==='manager'){const response=await api('/api/manager/applications');if(!response.ok)return note(await readError(response));state.managerApps=await response.json()}if(target.dataset.nav==='managers'){const [managersResponse,geoResponse]=await Promise.all([api('/api/superadmin/managers'),api('/api/manager/geo-settings')]);if(!managersResponse.ok)return note(await readError(managersResponse));if(!geoResponse.ok)return note(await readError(geoResponse));state.managers=await managersResponse.json();state.managerGeoSettings=await geoResponse.json()}return go(target.dataset.nav)}
+  if(target){if(target.dataset.nav==='apply'){state.forceApplication=false;state.justSubmitted=false;state.registrationStarted=false}if(target.dataset.nav==='manager'){const response=await api('/api/manager/applications');if(!response.ok)return note(await readError(response));state.managerApps=await response.json()}if(target.dataset.nav==='managers'){const [managersResponse,geoResponse]=await Promise.all([api('/api/superadmin/managers'),api('/api/manager/geo-settings')]);if(!managersResponse.ok)return note(await readError(managersResponse));if(!geoResponse.ok)return note(await readError(geoResponse));state.managers=await managersResponse.json();state.managerGeoSettings=await geoResponse.json()}if(target.dataset.nav==='giveaway'){state.giveawayStage='view';const active=await api('/api/giveaways/active');if(active.ok){state.giveaway=await active.json();if(state.giveaway){const participation=await api(`/api/giveaways/${state.giveaway.id}/participation`);state.giveawayParticipation=participation.ok?await participation.json():null}}}if(target.dataset.nav==='manager-giveaways'){const response=await api('/api/manager/giveaways');if(!response.ok)return note(await readError(response));state.managerGiveaways=await response.json()}return go(target.dataset.nav)}
   const faq=e.target.closest('.faq-question');if(faq)faq.parentElement.classList.toggle('open');
 });
 
@@ -135,6 +176,21 @@ document.addEventListener('submit',async e=>{
     }
     if(type==='agent-submit'){
       const response=await api('/api/agent-onboarding/submit',{method:'POST',body:JSON.stringify({confirmed_truth:data.confirmed_truth==='true'})});if(!response.ok)throw new Error(await readError(response));await refreshAccount();state.justSubmitted=true;state.forceApplication=false;state.agentStep=0;localStorage.setItem('agent-step','0');note(c.applicationSent);return render();
+    }
+    if(type==='giveaway-join-data'){
+      state.giveawayDraft={geo_code:(data.geo_code||'').trim(),player_id:(data.player_id||'').trim().replace(/\s+/g,'')};state.giveawayStage='confirm';return render();
+    }
+    if(type==='giveaway-create'||type==='giveaway-edit'){
+      const raw=new FormData(form);const body={title:(raw.get('title')||'').trim(),description:(raw.get('description')||'').trim(),prize:(raw.get('prize')||'').trim(),winner_count:Number(raw.get('winner_count')),entry_deadline:new Date(raw.get('entry_deadline')).toISOString(),draw_date:new Date(raw.get('draw_date')).toISOString(),geo_codes:raw.getAll('geo_codes'),rules:(raw.get('rules')||'').trim()};
+      const endpoint=type==='giveaway-create'?'/api/manager/giveaways':`/api/manager/giveaways/${form.dataset.giveawayId}`;const response=await api(endpoint,{method:type==='giveaway-create'?'POST':'PATCH',body:JSON.stringify(body)});if(!response.ok)throw new Error(await readError(response));state.managerGiveaway=await response.json();
+      const banner=raw.get('banner');if(type==='giveaway-create'&&banner instanceof File&&banner.size){const upload=new FormData();upload.append('banner',banner);const bannerResponse=await api(`/api/manager/giveaways/${state.managerGiveaway.id}/banner`,{method:'POST',body:upload});if(!bannerResponse.ok)note(await readError(bannerResponse));else{const refresh=await api(`/api/manager/giveaways/${state.managerGiveaway.id}`);if(refresh.ok)state.managerGiveaway=await refresh.json()}}
+      const [list,participants,history]=await Promise.all([api('/api/manager/giveaways'),api(`/api/manager/giveaways/${state.managerGiveaway.id}/participants`),api(`/api/manager/giveaways/${state.managerGiveaway.id}/history`)]);if(list.ok)state.managerGiveaways=await list.json();state.managerParticipants=participants.ok?await participants.json():{};state.managerGiveawayHistory=history.ok?await history.json():[];note(type==='giveaway-create'?'Preview розыгрыша создан':'Розыгрыш обновлён');return go('manager_giveaway');
+    }
+    if(type==='giveaway-participants-filter'){
+      const params=new URLSearchParams();if(data.query?.trim())params.set('query',data.query.trim());if(data.status)params.set('status',data.status);if(data.geo_code)params.set('geo_code',data.geo_code);const response=await api(`/api/manager/giveaways/${form.dataset.giveawayId}/participants?${params}`);if(!response.ok)throw new Error(await readError(response));state.managerParticipants=await response.json();return render();
+    }
+    if(type==='giveaway-broadcast'){
+      if(!await confirmAction('Отправить это сообщение выбранным участникам?'))return;const geo_codes=(data.geo_codes||'').split(',').map(value=>value.trim().toUpperCase()).filter(Boolean);const response=await api(`/api/manager/giveaways/${form.dataset.giveawayId}/broadcast`,{method:'POST',body:JSON.stringify({audience:data.audience,geo_codes,message:data.message,button_text:data.button_text||null})});if(!response.ok)throw new Error(await readError(response));const result=await response.json();note(`Рассылка завершена: ${result.sent}/${result.recipients}`);return;
     }
     if(type==='manager-action'){
       const actionValue=e.submitter?.value;if(!actionValue)return;const response=await api(`/api/manager/applications/${form.dataset.applicationId}/action`,{method:'POST',body:JSON.stringify({action:actionValue,comment:data.comment||null})});if(!response.ok)throw new Error(await readError(response));const list=await api('/api/manager/applications');state.managerApps=await list.json();note('Статус заявки обновлён');return render();

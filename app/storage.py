@@ -160,6 +160,88 @@ class SupportTicket(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class Giveaway(Base):
+    """A manager-controlled giveaway. Existing program tables stay independent."""
+    __tablename__ = "giveaways"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(180))
+    description: Mapped[str] = mapped_column(Text)
+    prize: Mapped[str] = mapped_column(String(300))
+    winner_count: Mapped[int] = mapped_column(Integer, default=1)
+    entry_deadline: Mapped[datetime] = mapped_column(DateTime, index=True)
+    draw_date: Mapped[datetime] = mapped_column(DateTime)
+    geo_codes: Mapped[str] = mapped_column(Text, default="[]")
+    rules: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    banner_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    banner_mime_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    banner_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    created_by: Mapped[int] = mapped_column(BigInteger, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class GiveawayParticipant(Base):
+    __tablename__ = "giveaway_participants"
+    __table_args__ = (
+        UniqueConstraint("giveaway_id", "telegram_id", name="uq_giveaway_participant_telegram"),
+        UniqueConstraint("giveaway_id", "player_id", name="uq_giveaway_participant_player"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    giveaway_id: Mapped[int] = mapped_column(ForeignKey("giveaways.id", ondelete="CASCADE"), index=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    telegram_username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    player_id: Mapped[str] = mapped_column(String(80))
+    geo_code: Mapped[str] = mapped_column(String(16), index=True)
+    participant_number: Mapped[str] = mapped_column(String(24), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(24), default="active", index=True)
+    exclusion_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    excluded_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    excluded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class GiveawayWinner(Base):
+    __tablename__ = "giveaway_winners"
+    __table_args__ = (UniqueConstraint("giveaway_id", "participant_id", name="uq_giveaway_winner_participant"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    giveaway_id: Mapped[int] = mapped_column(ForeignKey("giveaways.id", ondelete="CASCADE"), index=True)
+    participant_id: Mapped[int] = mapped_column(ForeignKey("giveaway_participants.id", ondelete="CASCADE"), index=True)
+    rank: Mapped[int] = mapped_column(Integer, index=True)
+    status: Mapped[str] = mapped_column(String(24), default="active", index=True)
+    selected_by: Mapped[int] = mapped_column(BigInteger, index=True)
+    selected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    replacement_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class GiveawayAuditLog(Base):
+    __tablename__ = "giveaway_audit_logs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    giveaway_id: Mapped[int] = mapped_column(ForeignKey("giveaways.id", ondelete="CASCADE"), index=True)
+    actor_telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    participant_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class GiveawayBroadcast(Base):
+    __tablename__ = "giveaway_broadcasts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    giveaway_id: Mapped[int | None] = mapped_column(ForeignKey("giveaways.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    audience: Mapped[str] = mapped_column(String(40))
+    geo_codes: Mapped[str] = mapped_column(Text, default="[]")
+    message: Mapped[str] = mapped_column(Text)
+    button_text: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    sent_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(24), default="queued", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 def init_storage() -> None:
     Base.metadata.create_all(engine)
     # create_all does not add columns to an existing Railway table. These
