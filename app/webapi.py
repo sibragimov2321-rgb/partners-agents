@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import time
 from typing import Literal
 from urllib.parse import parse_qsl
+from zoneinfo import ZoneInfo
 
 from fastapi import Header, HTTPException
 from pydantic import BaseModel, EmailStr, Field, model_validator
@@ -49,10 +50,27 @@ DOCUMENT_KINDS = {"deposit", "passport", "selfie"}
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 PHONE_RE = re.compile(r"^\+?[0-9][0-9 ()-]{5,23}$")
 
+try:
+    PROJECT_TIMEZONE = ZoneInfo(os.getenv("TIMEZONE", "Europe/Moscow"))
+except Exception:
+    PROJECT_TIMEZONE = timezone.utc
+
 
 def _utc_naive(value: datetime) -> datetime:
     """Persist timestamps in the same UTC-naive format as existing tables."""
     return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
+
+
+def _giveaway_utc_naive(value: datetime) -> datetime:
+    """Treat a datetime-local giveaway value as project local time, then store UTC."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=PROJECT_TIMEZONE)
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _giveaway_deadline_is_future(value: datetime, now: datetime | None = None) -> bool:
+    """The registration deadline must be after the current instant, not tomorrow."""
+    return value > (now if now is not None else datetime.utcnow())
 
 
 def _valid_image(data: bytes, mime_type: str) -> bool:
@@ -355,8 +373,8 @@ class GiveawayCreateIn(BaseModel):
 
     @model_validator(mode="after")
     def validate_dates_and_geos(self):
-        self.entry_deadline = _utc_naive(self.entry_deadline)
-        self.draw_date = _utc_naive(self.draw_date)
+        self.entry_deadline = _giveaway_utc_naive(self.entry_deadline)
+        self.draw_date = _giveaway_utc_naive(self.draw_date)
         self.geo_codes = sorted({code.strip().upper() for code in self.geo_codes if code.strip()})
         if not self.geo_codes:
             raise ValueError("Выберите хотя бы один GEO.")
@@ -378,9 +396,9 @@ class GiveawayUpdateIn(BaseModel):
     @model_validator(mode="after")
     def normalize_dates(self):
         if self.entry_deadline:
-            self.entry_deadline = _utc_naive(self.entry_deadline)
+            self.entry_deadline = _giveaway_utc_naive(self.entry_deadline)
         if self.draw_date:
-            self.draw_date = _utc_naive(self.draw_date)
+            self.draw_date = _giveaway_utc_naive(self.draw_date)
         return self
 
 
@@ -623,9 +641,8 @@ def public_winners(user: dict, giveaway_id: int) -> list[dict]:
 
 def create_giveaway(user: dict, payload: GiveawayCreateIn) -> dict:
     manager_user(user)
-    now = datetime.utcnow()
-    if payload.entry_deadline <= now:
-        raise HTTPException(422, "Дата окончания регистрации должна быть в будущем.")
+    if not _giveaway_deadline_is_future(payload.entry_deadline):
+        raise HTTPException(422, "Дата и время окончания регистрации должны быть позже текущего времени.")
     with Session(engine) as session:
         giveaway = Giveaway(
             title=payload.title.strip(),
@@ -665,6 +682,8 @@ def update_giveaway(user: dict, giveaway_id: int, payload: GiveawayUpdateIn) -> 
             if isinstance(value, str):
                 value = value.strip()
             setattr(giveaway, field, value)
+        if "entry_deadline" in values and not _giveaway_deadline_is_future(giveaway.entry_deadline):
+            raise HTTPException(422, "Дата и время окончания регистрации должны быть позже текущего времени.")
         if giveaway.draw_date < giveaway.entry_deadline:
             raise HTTPException(422, "Дата проведения не может быть раньше окончания регистрации.")
         giveaway.updated_at = datetime.utcnow()

@@ -43,6 +43,40 @@ def new_giveaway(manager=None):
     ))
 
 
+def test_today_registration_deadline_is_allowed_when_its_time_is_still_ahead():
+    """19:45 today → 22:00 today is valid in the configured project timezone."""
+    project_now = datetime(2026, 8, 26, 19, 45, tzinfo=webapi.PROJECT_TIMEZONE)
+    deadline = webapi._giveaway_utc_naive(datetime(2026, 8, 26, 22, 0))
+    now_utc = project_now.astimezone(timezone.utc).replace(tzinfo=None)
+
+    assert webapi._giveaway_deadline_is_future(deadline, now=now_utc) is True
+
+
+def test_today_registration_deadline_is_rejected_when_its_time_has_passed():
+    project_now = datetime(2026, 8, 26, 19, 45, tzinfo=webapi.PROJECT_TIMEZONE)
+    deadline = webapi._giveaway_utc_naive(datetime(2026, 8, 26, 19, 0))
+    now_utc = project_now.astimezone(timezone.utc).replace(tzinfo=None)
+
+    assert webapi._giveaway_deadline_is_future(deadline, now=now_utc) is False
+
+
+def test_past_registration_deadline_has_the_expected_error(isolated_database):
+    now = datetime.utcnow()
+    payload = webapi.GiveawayCreateIn(
+        title="Expired deadline",
+        description="A deadline that has already passed.",
+        prize="Test prize",
+        winner_count=1,
+        entry_deadline=now - timedelta(days=1),
+        draw_date=now + timedelta(days=1),
+        geo_codes=["UZ"],
+        rules="Test rules.",
+    )
+
+    with pytest.raises(HTTPException, match="Дата и время окончания регистрации должны быть позже текущего времени"):
+        webapi.create_giveaway(user(900), payload)
+
+
 def test_player_join_duplicates_exclusion_and_secure_draw(isolated_database):
     manager = user(900)
     giveaway = new_giveaway(manager)
