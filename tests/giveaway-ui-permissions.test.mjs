@@ -36,3 +36,10 @@ test('empty manager dashboard always offers creation of the first giveaway', () 
     assert.match(source, /\$\{button\('➕ Создать розыгрыш'.*\)\}\$\{list\}/);
   });
 });
+
+test('hyphenated giveaway navigation resolves to an internal manager route', () => {
+  return readFile(new URL('../web/app.js', import.meta.url), 'utf8').then(source => {
+    assert.match(source, /function go\(view\)\{state\.view=String\(view\)\.replaceAll\('-','_'\)/);
+    assert.match(source, /target\.dataset\.nav==='manager-giveaways'/);
+  });
+});
