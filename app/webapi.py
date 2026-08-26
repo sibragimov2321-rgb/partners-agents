@@ -15,6 +15,13 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.orm import Session
 
+from .cashier_api import (
+    CashierApiUnavailable,
+    cashier_is_configured,
+    currency_geo_mapping,
+    currency_matches_geo,
+    verify_player,
+)
 from .storage import (
     AgentApplication,
     AgentApplicationHistory,
@@ -654,6 +661,28 @@ def giveaway_participation(user: dict, giveaway_id: int) -> dict | None:
             GiveawayParticipant.telegram_id == int(user["id"]),
         ))
         return _participant_payload(participant, owner=True) if participant else None
+
+
+async def validate_giveaway_player(payload: GiveawayJoinIn) -> dict:
+    """Validate a Player ID before saving a giveaway participation.
+
+    Existing giveaway registration remains available until the cashier
+    credentials are put in Railway. Once configured, every check is enforced
+    server-side again immediately before the participation is created.
+    """
+    if not cashier_is_configured():
+        return {"verified": False, "integration": "not_configured"}
+    try:
+        verification = await verify_player(payload.player_id)
+    except CashierApiUnavailable as error:
+        raise HTTPException(503, "Не удалось проверить Player ID. Попробуйте ещё раз.") from error
+    if not verification.exists:
+        raise HTTPException(422, "❌ Player ID не найден.")
+    if not currency_geo_mapping():
+        raise HTTPException(503, "Не настроено соответствие currencyId и GEO. Обратитесь к менеджеру.")
+    if not currency_matches_geo(verification.currency_id, payload.geo_code):
+        raise HTTPException(422, "❌ Этот игровой аккаунт относится к другому региону.")
+    return {"verified": True}
 
 
 def join_giveaway(user: dict, giveaway_id: int, payload: GiveawayJoinIn) -> dict:

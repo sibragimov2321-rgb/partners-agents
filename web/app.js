@@ -1,7 +1,7 @@
 import { esc, icon } from './ui.js?v=20260826-3';
 import * as screens from './screens.js?v=20260826-3';
 import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-7';
-import { renderGiveaway, renderGiveawayCreate, renderGiveawayManager, renderGiveawayManagerDetail, renderGiveawayWinners, renderMyGiveaway } from './giveaways.js?v=20260826-3';
+import { renderGiveaway, renderGiveawayCreate, renderGiveawayManager, renderGiveawayManagerDetail, renderGiveawayWinners, renderMyGiveaway } from './giveaways.js?v=20260827-1';
 import { canManageGiveaways } from './giveaway-permissions.mjs?v=20260826-2';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const giveawayFromUrl=new URLSearchParams(window.location.search).get('giveaway');
@@ -182,7 +182,9 @@ document.addEventListener('submit',async e=>{
       const response=await api('/api/agent-onboarding/submit',{method:'POST',body:JSON.stringify({confirmed_truth:data.confirmed_truth==='true'})});if(!response.ok)throw new Error(await readError(response));await refreshAccount();state.justSubmitted=true;state.forceApplication=false;state.agentStep=0;localStorage.setItem('agent-step','0');note(c.applicationSent);return render();
     }
     if(type==='giveaway-join-data'){
-      state.giveawayDraft={geo_code:(data.geo_code||'').trim(),player_id:(data.player_id||'').trim().replace(/\s+/g,'')};state.giveawayStage='confirm';return render();
+      const draft={geo_code:(data.geo_code||'').trim(),player_id:(data.player_id||'').trim().replace(/\s+/g,'')};
+      const response=await api(`/api/giveaways/${state.giveaway.id}/validate-player`,{method:'POST',body:JSON.stringify(draft)});if(!response.ok)throw new Error(await readError(response));
+      const verification=await response.json();state.giveawayDraft={...draft,cashier_verified:Boolean(verification.verified)};state.giveawayStage='confirm';return render();
     }
     if(type==='giveaway-create'||type==='giveaway-edit'){
       const raw=new FormData(form);const body={title:(raw.get('title')||'').trim(),description:(raw.get('description')||'').trim(),prize:(raw.get('prize')||'').trim(),winner_count:Number(raw.get('winner_count')),start_at:new Date(raw.get('start_at')).toISOString(),end_at:new Date(raw.get('end_at')).toISOString(),geo_codes:raw.getAll('geo_codes'),rules:(raw.get('rules')||'').trim()};

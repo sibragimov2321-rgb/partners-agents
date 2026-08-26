@@ -75,6 +75,7 @@ from .webapi import (
     update_geo_setting,
     update_giveaway,
     join_giveaway,
+    validate_giveaway_player,
     list_giveaway_participants,
     replace_giveaway_winner,
 )
@@ -89,7 +90,7 @@ if not PUBLIC_APP_URL.startswith(("http://", "https://")):
 # Telegram Desktop and mobile clients can cache a Mini App by its exact URL.
 # Bump this non-secret build marker when frontend navigation changes so the
 # menu button always opens the current deployment instead of a cached shell.
-WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260827-1").strip()
+WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260827-2").strip()
 
 BASE = Path(__file__).resolve().parent.parent
 WEBHOOK_PATH = "/telegram/webhook"
@@ -228,8 +229,16 @@ def get_giveaway_participation(giveaway_id: int, user: dict = Depends(current_us
 
 
 @api.post("/api/giveaways/{giveaway_id}/participation")
-def create_giveaway_participation(giveaway_id: int, payload: GiveawayJoinIn, user: dict = Depends(current_user)):
-    return join_giveaway(user, giveaway_id, payload)
+async def create_giveaway_participation(giveaway_id: int, payload: GiveawayJoinIn, user: dict = Depends(current_user)):
+    await validate_giveaway_player(payload)
+    return await asyncio.to_thread(join_giveaway, user, giveaway_id, payload)
+
+
+@api.post("/api/giveaways/{giveaway_id}/validate-player")
+async def validate_giveaway_participant(giveaway_id: int, payload: GiveawayJoinIn, user: dict = Depends(current_user)):
+    # Authentication is intentionally required even for a pre-check. The ID
+    # itself is not persisted or exposed by this endpoint.
+    return await validate_giveaway_player(payload)
 
 
 @api.get("/api/giveaways/{giveaway_id}/winners")
