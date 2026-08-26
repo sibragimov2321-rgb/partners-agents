@@ -80,7 +80,9 @@ from .webapi import (
 
 logging.basicConfig(level=logging.INFO)
 TOKEN = os.environ["BOT_TOKEN"]
-PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:8000").strip().rstrip("/")
+# Older Railway deployments used WEBAPP_URL.  Accept it as a safe fallback so
+# the already-configured bot button and webhook never fall back to localhost.
+PUBLIC_APP_URL = (os.getenv("PUBLIC_APP_URL") or os.getenv("WEBAPP_URL") or "http://localhost:8000").strip().rstrip("/")
 if not PUBLIC_APP_URL.startswith(("http://", "https://")):
     PUBLIC_APP_URL = "https://" + PUBLIC_APP_URL
 # Telegram Desktop and mobile clients can cache a Mini App by its exact URL.
