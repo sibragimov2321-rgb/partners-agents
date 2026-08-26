@@ -43,3 +43,28 @@ test('hyphenated giveaway navigation resolves to an internal manager route', () 
     assert.match(source, /target\.dataset\.nav==='manager-giveaways'/);
   });
 });
+
+test('giveaway form uses start and end times without USD or legacy fields', async () => {
+  const [giveaways, app] = await Promise.all([
+    readFile(new URL('../web/giveaways.js', import.meta.url), 'utf8'),
+    readFile(new URL('../web/app.js', import.meta.url), 'utf8'),
+  ]);
+  assert.match(giveaways, /name="start_at"/);
+  assert.match(giveaways, /name="end_at"/);
+  assert.doesNotMatch(giveaways, /name="entry_deadline"/);
+  assert.doesNotMatch(giveaways, /name="draw_date"/);
+  assert.doesNotMatch(giveaways, /500 USD/);
+  assert.match(app, /start_at:new Date\(raw.get\('start_at'\)\)\.toISOString\(\)/);
+  assert.match(app, /end_at:new Date\(raw.get\('end_at'\)\)\.toISOString\(\)/);
+});
+
+test('frontend has fallback title and role display labels', async () => {
+  const [giveaways, screens] = await Promise.all([
+    readFile(new URL('../web/giveaways.js', import.meta.url), 'utf8'),
+    readFile(new URL('../web/screens.js', import.meta.url), 'utf8'),
+  ]);
+  assert.match(giveaways, /giveaway\?\.title\?\.trim\(\) \|\| '🎁 Розыгрыш'/);
+  assert.match(screens, /manager:'Менеджер'/);
+  assert.match(screens, /agent:'Агент'/);
+  assert.match(screens, /display_role/);
+});

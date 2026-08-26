@@ -242,10 +242,19 @@ def profile_payload(user: dict) -> dict:
         # frontend and backend use the same effective permission.
         is_manager = is_manager_id(user["id"])
         is_superadmin = is_superadmin_id(user["id"])
+        is_agent = bool(application and application.status == "approved" and application.agent_id)
+        display_role = (
+            "superadmin" if is_superadmin else
+            "manager" if is_manager else
+            "agent" if is_agent else
+            "user"
+        )
         return {
             "telegram": user,
             "is_manager": is_manager or is_superadmin,
             "is_superadmin": is_superadmin,
+            "is_agent": is_agent,
+            "display_role": display_role,
             "can_manage_giveaways": is_manager or is_superadmin,
             "application": application_payload(application, session) if application else None,
         }
@@ -362,43 +371,46 @@ class ManagerAccessIn(BaseModel):
 
 
 class GiveawayCreateIn(BaseModel):
-    title: str = Field(min_length=3, max_length=180)
-    description: str = Field(min_length=3, max_length=5000)
-    prize: str = Field(min_length=2, max_length=300)
+    title: str = Field(default="", max_length=180)
+    description: str = Field(default="", max_length=5000)
+    prize: str = Field(min_length=1, max_length=300)
     winner_count: int = Field(ge=1, le=100)
-    entry_deadline: datetime
-    draw_date: datetime
+    start_at: datetime
+    end_at: datetime
     geo_codes: list[str] = Field(min_length=1, max_length=50)
     rules: str = Field(default="", max_length=8000)
 
     @model_validator(mode="after")
     def validate_dates_and_geos(self):
-        self.entry_deadline = _giveaway_utc_naive(self.entry_deadline)
-        self.draw_date = _giveaway_utc_naive(self.draw_date)
+        self.start_at = _giveaway_utc_naive(self.start_at)
+        self.end_at = _giveaway_utc_naive(self.end_at)
+        self.title = self.title.strip()
+        self.description = self.description.strip()
+        self.prize = self.prize.strip()
         self.geo_codes = sorted({code.strip().upper() for code in self.geo_codes if code.strip()})
         if not self.geo_codes:
             raise ValueError("Выберите хотя бы один GEO.")
-        if self.draw_date < self.entry_deadline:
-            raise ValueError("Дата проведения не может быть раньше окончания регистрации.")
+        if self.end_at <= self.start_at:
+            raise ValueError("Окончание розыгрыша должно быть позже начала.")
         return self
 
 
 class GiveawayUpdateIn(BaseModel):
-    title: str | None = Field(default=None, min_length=3, max_length=180)
-    description: str | None = Field(default=None, min_length=3, max_length=5000)
-    prize: str | None = Field(default=None, min_length=2, max_length=300)
+    title: str | None = Field(default=None, max_length=180)
+    description: str | None = Field(default=None, max_length=5000)
+    prize: str | None = Field(default=None, min_length=1, max_length=300)
     winner_count: int | None = Field(default=None, ge=1, le=100)
-    entry_deadline: datetime | None = None
-    draw_date: datetime | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
     geo_codes: list[str] | None = Field(default=None, max_length=50)
     rules: str | None = Field(default=None, max_length=8000)
 
     @model_validator(mode="after")
     def normalize_dates(self):
-        if self.entry_deadline:
-            self.entry_deadline = _giveaway_utc_naive(self.entry_deadline)
-        if self.draw_date:
-            self.draw_date = _giveaway_utc_naive(self.draw_date)
+        if self.start_at:
+            self.start_at = _giveaway_utc_naive(self.start_at)
+        if self.end_at:
+            self.end_at = _giveaway_utc_naive(self.end_at)
         return self
 
 
@@ -475,6 +487,49 @@ def update_geo_setting(user: dict, geo_code: str, payload: GeoSettingIn) -> dict
 # Giveaway module -----------------------------------------------------------
 # Kept isolated from applications: a player can participate without being an
 # agent, and all mutations remain protected by the existing manager role.
+def _giveaway_uses_schedule(giveaway: Giveaway) -> bool:
+    return giveaway.start_at is not None and giveaway.end_at is not None
+
+
+def _giveaway_start(giveaway: Giveaway) -> datetime:
+    return giveaway.start_at or giveaway.created_at
+
+
+def _giveaway_end(giveaway: Giveaway) -> datetime:
+    return giveaway.end_at or giveaway.entry_deadline
+
+
+def _utc_iso(value: datetime) -> str:
+    return value.replace(tzinfo=timezone.utc).isoformat()
+
+
+def _sync_giveaway_schedule(giveaway: Giveaway, now: datetime | None = None) -> bool:
+    """Advance a new giveaway from draft → active → closed by its schedule."""
+    if not _giveaway_uses_schedule(giveaway) or giveaway.status in {"cancelled", "drawn"}:
+        return False
+    moment = now or datetime.utcnow()
+    previous = giveaway.status
+    if moment >= _giveaway_end(giveaway) and giveaway.status in {"draft", "active"}:
+        giveaway.status = "closed"
+    elif moment >= _giveaway_start(giveaway) and giveaway.status == "draft":
+        giveaway.status = "active"
+    if giveaway.status != previous:
+        giveaway.updated_at = moment
+        return True
+    return False
+
+
+def _sync_scheduled_giveaways(session: Session, now: datetime | None = None) -> None:
+    moment = now or datetime.utcnow()
+    giveaways = session.scalars(select(Giveaway).where(
+        Giveaway.start_at.is_not(None),
+        Giveaway.end_at.is_not(None),
+        Giveaway.status.in_(["draft", "active"]),
+    )).all()
+    if any(_sync_giveaway_schedule(giveaway, moment) for giveaway in giveaways):
+        session.commit()
+
+
 def _giveaway_geos(giveaway: Giveaway) -> list[str]:
     try:
         value = json.loads(giveaway.geo_codes or "[]")
@@ -549,12 +604,15 @@ def _giveaway_payload(giveaway: Giveaway, session: Session, manager: bool = Fals
     return {
         "id": giveaway.id,
         "number": f"GW-{giveaway.id:04d}",
-        "title": giveaway.title,
-        "description": giveaway.description,
+        "title": giveaway.title or "🎁 Розыгрыш",
+        "description": giveaway.description or "",
         "prize": giveaway.prize,
         "winner_count": giveaway.winner_count,
-        "entry_deadline": giveaway.entry_deadline.isoformat(),
-        "draw_date": giveaway.draw_date.isoformat(),
+        "start_at": _utc_iso(_giveaway_start(giveaway)),
+        "end_at": _utc_iso(_giveaway_end(giveaway)),
+        # Kept for legacy read-only clients during the Mini App transition.
+        "entry_deadline": _utc_iso(_giveaway_end(giveaway)),
+        "draw_date": _utc_iso(_giveaway_end(giveaway)),
         "geo_codes": _giveaway_geos(giveaway),
         "rules": giveaway.rules,
         "status": giveaway.status,
@@ -578,6 +636,7 @@ def _get_giveaway(session: Session, giveaway_id: int) -> Giveaway:
 
 def active_giveaway(user: dict) -> dict | None:
     with Session(engine) as session:
+        _sync_scheduled_giveaways(session)
         giveaway = session.scalar(select(Giveaway).where(
             Giveaway.status == "active",
         ).order_by(Giveaway.created_at.desc(), Giveaway.id.desc()))
@@ -597,7 +656,10 @@ def join_giveaway(user: dict, giveaway_id: int, payload: GiveawayJoinIn) -> dict
     now = datetime.utcnow()
     with Session(engine) as session:
         giveaway = _get_giveaway(session, giveaway_id)
-        if giveaway.status != "active" or giveaway.entry_deadline <= now:
+        _sync_giveaway_schedule(giveaway, now)
+        if _giveaway_uses_schedule(giveaway) and now < _giveaway_start(giveaway):
+            raise HTTPException(409, "Розыгрыш ещё не начался.")
+        if giveaway.status != "active" or _giveaway_end(giveaway) <= now:
             raise HTTPException(409, "Регистрация в этом розыгрыше уже закрыта.")
         if payload.geo_code not in _giveaway_geos(giveaway):
             raise HTTPException(422, "Выбранный GEO не участвует в этом розыгрыше.")
@@ -641,20 +703,27 @@ def public_winners(user: dict, giveaway_id: int) -> list[dict]:
 
 def create_giveaway(user: dict, payload: GiveawayCreateIn) -> dict:
     manager_user(user)
-    if not _giveaway_deadline_is_future(payload.entry_deadline):
-        raise HTTPException(422, "Дата и время окончания регистрации должны быть позже текущего времени.")
+    if not _giveaway_deadline_is_future(payload.end_at):
+        raise HTTPException(422, "Дата и время окончания розыгрыша должны быть позже текущего времени.")
     with Session(engine) as session:
         giveaway = Giveaway(
             title=payload.title.strip(),
             description=payload.description.strip(),
             prize=payload.prize.strip(),
             winner_count=payload.winner_count,
-            entry_deadline=payload.entry_deadline,
-            draw_date=payload.draw_date,
+            entry_deadline=payload.end_at,
+            draw_date=payload.end_at,
+            start_at=payload.start_at,
+            end_at=payload.end_at,
             geo_codes=json.dumps(payload.geo_codes),
             rules=payload.rules.strip(),
             created_by=int(user["id"]),
+            # New giveaways are activated by their configured start time.
+            # SQLAlchemy column defaults are applied on INSERT, therefore set
+            # this explicitly before the first schedule sync.
+            status="active" if payload.start_at <= datetime.utcnow() else "draft",
         )
+        _sync_giveaway_schedule(giveaway)
         session.add(giveaway)
         session.flush()
         _giveaway_audit(session, giveaway.id, int(user["id"]), "created", details={
@@ -678,14 +747,21 @@ def update_giveaway(user: dict, giveaway_id: int, payload: GiveawayUpdateIn) -> 
             if not codes:
                 raise HTTPException(422, "Выберите хотя бы один GEO.")
             values["geo_codes"] = json.dumps(codes)
+        if "end_at" in values:
+            values["entry_deadline"] = values["end_at"]
+            values["draw_date"] = values["end_at"]
         for field, value in values.items():
             if isinstance(value, str):
                 value = value.strip()
             setattr(giveaway, field, value)
-        if "entry_deadline" in values and not _giveaway_deadline_is_future(giveaway.entry_deadline):
-            raise HTTPException(422, "Дата и время окончания регистрации должны быть позже текущего времени.")
-        if giveaway.draw_date < giveaway.entry_deadline:
+        if _giveaway_uses_schedule(giveaway):
+            if _giveaway_end(giveaway) <= _giveaway_start(giveaway):
+                raise HTTPException(422, "Окончание розыгрыша должно быть позже начала.")
+            if "end_at" in values and not _giveaway_deadline_is_future(_giveaway_end(giveaway)):
+                raise HTTPException(422, "Дата и время окончания розыгрыша должны быть позже текущего времени.")
+        elif giveaway.draw_date < giveaway.entry_deadline:
             raise HTTPException(422, "Дата проведения не может быть раньше окончания регистрации.")
+        _sync_giveaway_schedule(giveaway)
         giveaway.updated_at = datetime.utcnow()
         _giveaway_audit(session, giveaway.id, int(user["id"]), "updated", details={"fields": sorted(values)})
         session.commit()
@@ -696,6 +772,7 @@ def update_giveaway(user: dict, giveaway_id: int, payload: GiveawayUpdateIn) -> 
 def manager_giveaways(user: dict) -> list[dict]:
     manager_user(user)
     with Session(engine) as session:
+        _sync_scheduled_giveaways(session)
         giveaways = session.scalars(select(Giveaway).order_by(Giveaway.updated_at.desc(), Giveaway.id.desc())).all()
         return [_giveaway_payload(item, session, manager=True) for item in giveaways]
 
@@ -703,13 +780,19 @@ def manager_giveaways(user: dict) -> list[dict]:
 def manager_giveaway(user: dict, giveaway_id: int) -> dict:
     manager_user(user)
     with Session(engine) as session:
-        return _giveaway_payload(_get_giveaway(session, giveaway_id), session, manager=True)
+        giveaway = _get_giveaway(session, giveaway_id)
+        if _sync_giveaway_schedule(giveaway):
+            session.commit()
+        return _giveaway_payload(giveaway, session, manager=True)
 
 
 def giveaway_action(user: dict, giveaway_id: int, action: Literal["launch", "close", "cancel"]) -> dict:
     manager_user(user)
     with Session(engine) as session:
         giveaway = _get_giveaway(session, giveaway_id)
+        _sync_giveaway_schedule(giveaway)
+        if _giveaway_uses_schedule(giveaway) and action in {"launch", "close"}:
+            raise HTTPException(409, "Статус этого розыгрыша меняется автоматически по времени.")
         old_status = giveaway.status
         allowed = {
             "launch": {"draft"},
@@ -822,6 +905,10 @@ def draw_giveaway(user: dict, giveaway_id: int) -> dict:
         giveaway = session.scalar(statement)
         if not giveaway:
             raise HTTPException(404, "Розыгрыш не найден.")
+        now = datetime.utcnow()
+        _sync_giveaway_schedule(giveaway, now)
+        if _giveaway_uses_schedule(giveaway) and now < _giveaway_end(giveaway):
+            raise HTTPException(409, "Провести розыгрыш можно после его окончания.")
         if giveaway.status not in {"active", "closed"}:
             raise HTTPException(409, "Провести розыгрыш можно только для активного или закрытого события.")
         existing = session.scalar(select(GiveawayWinner.id).where(

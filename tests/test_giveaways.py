@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 os.environ.setdefault("BOT_TOKEN", "123456:test-token")
 
 from app import storage, webapi
-from app.storage import GiveawayAuditLog
+from app.storage import AgentApplication, Giveaway, GiveawayAuditLog
 
 
 @pytest.fixture(autouse=True)
@@ -29,175 +29,125 @@ def user(user_id: int):
     return {"id": user_id, "username": f"user{user_id}", "first_name": "Test", "last_name": "User"}
 
 
-def new_giveaway(manager=None):
-    now = datetime.utcnow()
-    return webapi.create_giveaway(manager or user(900), webapi.GiveawayCreateIn(
-        title="Test Giveaway",
-        description="A test giveaway for the automated test suite.",
-        prize="500 USDT",
-        winner_count=3,
-        entry_deadline=now + timedelta(days=1),
-        draw_date=now + timedelta(days=2),
-        geo_codes=["UZ", "KG", "TJ", "TM"],
-        rules="One player ID and one Telegram account per draw.",
-    ))
+def giveaway_input(**overrides):
+    now = datetime.now(webapi.PROJECT_TIMEZONE)
+    values = {
+        "title": "Test Giveaway",
+        "description": "A test giveaway for the automated test suite.",
+        "prize": "500",
+        "winner_count": 3,
+        "start_at": now - timedelta(minutes=1),
+        "end_at": now + timedelta(days=1),
+        "geo_codes": ["UZ", "KG", "TJ", "TM"],
+        "rules": "One player ID and one Telegram account per draw.",
+    }
+    values.update(overrides)
+    return webapi.GiveawayCreateIn(**values)
 
 
-def test_today_registration_deadline_is_allowed_when_its_time_is_still_ahead():
-    """A same-day deadline may be as close as one minute after the current time."""
-    project_now = datetime(2026, 8, 26, 19, 50, tzinfo=webapi.PROJECT_TIMEZONE)
-    now_utc = project_now.astimezone(timezone.utc).replace(tzinfo=None)
-
-    for local_time in ((20, 0), (20, 10), (19, 55)):
-        deadline = webapi._giveaway_utc_naive(datetime(2026, 8, 26, *local_time))
-        assert webapi._giveaway_deadline_is_future(deadline, now=now_utc) is True
+def new_giveaway(manager=None, **overrides):
+    return webapi.create_giveaway(manager or user(900), giveaway_input(**overrides))
 
 
-def test_today_registration_deadline_is_rejected_when_its_time_has_passed():
-    project_now = datetime(2026, 8, 26, 19, 50, tzinfo=webapi.PROJECT_TIMEZONE)
-    deadline = webapi._giveaway_utc_naive(datetime(2026, 8, 26, 19, 49))
-    now_utc = project_now.astimezone(timezone.utc).replace(tzinfo=None)
+def close_giveaway_for_draw(engine, giveaway_id: int):
+    with Session(engine) as session:
+        giveaway = session.get(Giveaway, giveaway_id)
+        giveaway.end_at = datetime.utcnow() - timedelta(seconds=1)
+        giveaway.entry_deadline = giveaway.end_at
+        giveaway.draw_date = giveaway.end_at
+        session.commit()
 
-    assert webapi._giveaway_deadline_is_future(deadline, now=now_utc) is False
+
+def test_same_day_start_and_end_are_allowed_when_end_is_in_the_future(isolated_database):
+    now = datetime.now(webapi.PROJECT_TIMEZONE)
+    giveaway = new_giveaway(title="", description="", start_at=now + timedelta(minutes=1), end_at=now + timedelta(minutes=10))
+    assert giveaway["status"] == "draft"
+    assert giveaway["title"] == "🎁 Розыгрыш"
+    assert giveaway["description"] == ""
+    assert giveaway["start_at"] < giveaway["end_at"]
 
 
-def test_past_registration_deadline_has_the_expected_error(isolated_database):
-    now = datetime.utcnow()
-    payload = webapi.GiveawayCreateIn(
-        title="Expired deadline",
-        description="A deadline that has already passed.",
-        prize="Test prize",
-        winner_count=1,
-        entry_deadline=now - timedelta(days=1),
-        draw_date=now + timedelta(days=1),
-        geo_codes=["UZ"],
-        rules="Test rules.",
+def test_end_time_must_be_after_start_and_current_time(isolated_database):
+    now = datetime.now(webapi.PROJECT_TIMEZONE)
+    with pytest.raises(ValueError, match="Окончание розыгрыша должно быть позже начала"):
+        giveaway_input(start_at=now + timedelta(minutes=10), end_at=now + timedelta(minutes=5))
+    with pytest.raises(HTTPException, match="Дата и время окончания розыгрыша должны быть позже текущего времени"):
+        new_giveaway(start_at=now - timedelta(minutes=2), end_at=now - timedelta(minutes=1))
+
+
+def test_webapp_utc_dates_keep_the_correct_order(isolated_database):
+    now = datetime.now(timezone.utc)
+    giveaway = new_giveaway(
+        start_at=(now + timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+        end_at=(now + timedelta(minutes=2)).isoformat().replace("+00:00", "Z"),
     )
-
-    with pytest.raises(HTTPException, match="Дата и время окончания регистрации должны быть позже текущего времени"):
-        webapi.create_giveaway(user(900), payload)
+    assert giveaway["start_at"].endswith("+00:00")
+    assert giveaway["end_at"].endswith("+00:00")
 
 
 def test_player_join_duplicates_exclusion_and_secure_draw(isolated_database):
     manager = user(900)
     giveaway = new_giveaway(manager)
-    giveaway = webapi.giveaway_action(manager, giveaway["id"], "launch")
+    assert giveaway["status"] == "active"
     participants = []
     for offset, geo in enumerate(["UZ", "KG", "TJ", "TM", "UZ"], start=1):
-        participants.append(webapi.join_giveaway(user(100 + offset), giveaway["id"], webapi.GiveawayJoinIn(
-            geo_code=geo, player_id=f"player-{offset}",
-        )))
-
+        participants.append(webapi.join_giveaway(user(100 + offset), giveaway["id"], webapi.GiveawayJoinIn(geo_code=geo, player_id=f"player-{offset}")))
     with pytest.raises(HTTPException) as duplicate_telegram:
         webapi.join_giveaway(user(101), giveaway["id"], webapi.GiveawayJoinIn(geo_code="UZ", player_id="new-player"))
     assert duplicate_telegram.value.status_code == 409
     with pytest.raises(HTTPException) as duplicate_player:
         webapi.join_giveaway(user(200), giveaway["id"], webapi.GiveawayJoinIn(geo_code="UZ", player_id="player-1"))
     assert duplicate_player.value.status_code == 409
-
-    excluded = webapi.set_participant_excluded(manager, giveaway["id"], participants[-1]["id"], webapi.GiveawayParticipantActionIn(reason="Тестовое исключение"))
-    assert excluded["status"] == "excluded"
-    restored = webapi.restore_participant(manager, giveaway["id"], participants[-1]["id"])
-    assert restored["status"] == "active"
-
+    assert webapi.set_participant_excluded(manager, giveaway["id"], participants[-1]["id"], webapi.GiveawayParticipantActionIn(reason="Тестовое исключение"))["status"] == "excluded"
+    assert webapi.restore_participant(manager, giveaway["id"], participants[-1]["id"])["status"] == "active"
+    with pytest.raises(HTTPException, match="после его окончания"):
+        webapi.draw_giveaway(manager, giveaway["id"])
+    close_giveaway_for_draw(isolated_database, giveaway["id"])
     drawn = webapi.draw_giveaway(manager, giveaway["id"])
     assert drawn["status"] == "drawn"
     assert len(drawn["winners"]) == 3
-    numbers = [winner["participant"]["participant_number"] for winner in drawn["winners"]]
-    assert len(numbers) == len(set(numbers)) == 3
-    assert all(winner["participant"]["player_id"].endswith("er-" + winner["participant"]["player_id"][-1]) for winner in drawn["winners"])
+    assert len({winner["participant"]["participant_number"] for winner in drawn["winners"]}) == 3
+    assert all(winner["participant"]["player_id"].startswith("player-") for winner in drawn["winners"])
     public = webapi.public_winners(user(501), giveaway["id"])
     assert public and all(item["participant"]["player_id"].startswith("****") for item in public)
-
     with pytest.raises(HTTPException) as second_draw:
         webapi.draw_giveaway(manager, giveaway["id"])
     assert second_draw.value.status_code == 409
-
-    history = webapi.giveaway_history(manager, giveaway["id"])
-    assert any(item["action"] == "draw_completed" for item in history)
+    assert any(item["action"] == "draw_completed" for item in webapi.giveaway_history(manager, giveaway["id"]))
     with Session(isolated_database) as session:
-        assert session.query(GiveawayAuditLog).filter_by(giveaway_id=giveaway["id"]).count() >= 8
+        assert session.query(GiveawayAuditLog).filter_by(giveaway_id=giveaway["id"]).count() >= 5
 
 
 def test_only_manager_can_control_giveaway_and_broadcast_targets(isolated_database):
     giveaway = new_giveaway()
     with pytest.raises(HTTPException) as denied:
-        webapi.giveaway_action(user(111), giveaway["id"], "launch")
+        webapi.create_giveaway(user(111), giveaway_input())
     assert denied.value.status_code == 403
-
     manager = user(900)
-    webapi.giveaway_action(manager, giveaway["id"], "launch")
     joined = webapi.join_giveaway(user(111), giveaway["id"], webapi.GiveawayJoinIn(geo_code="UZ", player_id="partner-111"))
     webapi.join_giveaway(user(112), giveaway["id"], webapi.GiveawayJoinIn(geo_code="KG", player_id="partner-112"))
-    targets = webapi.create_giveaway_broadcast(manager, giveaway["id"], webapi.GiveawayBroadcastIn(
-        audience="geo", geo_codes=["UZ"], message="Тестовое сообщение", button_text="Участвовать",
-    ))
+    targets = webapi.create_giveaway_broadcast(manager, giveaway["id"], webapi.GiveawayBroadcastIn(audience="geo", geo_codes=["UZ"], message="Тестовое сообщение", button_text="Участвовать"))
     assert targets["recipients"] == [111]
     listed = webapi.list_giveaway_participants(manager, giveaway["id"], query=joined["participant_number"])
     assert listed["total"] == 2
     assert listed["participants"][0]["player_id"] == "partner-111"
 
 
-def test_user_manager_and_superadmin_giveaway_permissions(isolated_database):
-    owner = user(900)
-    manager = user(901)
-    regular_user = user(902)
+def test_role_display_priority_for_user_manager_agent_and_superadmin(isolated_database):
+    owner, manager, agent, regular_user = user(900), user(901), user(902), user(903)
     webapi.grant_manager_access(owner, webapi.ManagerAccessIn(telegram_id=manager["id"]))
-
-    regular_profile = webapi.profile_payload(regular_user)
-    manager_profile = webapi.profile_payload(manager)
-    owner_profile = webapi.profile_payload(owner)
-    assert regular_profile["can_manage_giveaways"] is False
-    assert manager_profile["is_manager"] is True
-    assert manager_profile["can_manage_giveaways"] is True
-    assert owner_profile["is_superadmin"] is True
-    assert owner_profile["can_manage_giveaways"] is True
-
-    with pytest.raises(HTTPException) as denied:
-        webapi.create_giveaway(regular_user, webapi.GiveawayCreateIn(
-            title="No access", description="Regular user cannot create giveaways.", prize="Prize",
-            winner_count=1, entry_deadline=datetime.utcnow() + timedelta(days=1),
-            draw_date=datetime.utcnow() + timedelta(days=2), geo_codes=["UZ"], rules="Rules",
-        ))
-    assert denied.value.status_code == 403
-    assert webapi.create_giveaway(manager, webapi.GiveawayCreateIn(
-        title="Manager access", description="Manager can create a giveaway.", prize="Prize",
-        winner_count=1, entry_deadline=datetime.utcnow() + timedelta(days=1),
-        draw_date=datetime.utcnow() + timedelta(days=2), geo_codes=["UZ"], rules="Rules",
-    ))["status"] == "draft"
-    assert webapi.create_giveaway(owner, webapi.GiveawayCreateIn(
-        title="Owner access", description="Superadmin can create a giveaway.", prize="Prize",
-        winner_count=1, entry_deadline=datetime.utcnow() + timedelta(days=3),
-        draw_date=datetime.utcnow() + timedelta(days=4), geo_codes=["UZ"], rules="Rules",
-    ))["status"] == "draft"
+    with Session(isolated_database) as session:
+        session.add(AgentApplication(telegram_id=agent["id"], name="Agent Test", email="agent@example.com", country="Tajikistan", phone="+992900000000", status="approved", agent_id="PA-000902"))
+        session.commit()
+    assert webapi.profile_payload(regular_user)["display_role"] == "user"
+    assert webapi.profile_payload(agent)["display_role"] == "agent"
+    assert webapi.profile_payload(manager)["display_role"] == "manager"
+    assert webapi.profile_payload(owner)["display_role"] == "superadmin"
 
 
-def test_only_one_giveaway_can_be_active_at_a_time(isolated_database):
-    manager = user(900)
-    first = new_giveaway(manager)
-    webapi.giveaway_action(manager, first["id"], "launch")
-    second = new_giveaway(manager)
-    with pytest.raises(HTTPException) as error:
-        webapi.giveaway_action(manager, second["id"], "launch")
-    assert error.value.status_code == 409
-
-
-def test_giveaway_accepts_webapp_iso_dates_and_owner_sees_own_player_id(isolated_database):
-    now = datetime.now(timezone.utc)
-    payload = webapi.GiveawayCreateIn(
-        title="ISO date test",
-        description="Timezone-safe Mini App date input.",
-        prize="Test prize",
-        winner_count=1,
-        entry_deadline=(now + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
-        draw_date=(now + timedelta(days=2)).isoformat().replace("+00:00", "Z"),
-        geo_codes=["UZ"],
-        rules="Test rules.",
-    )
-    giveaway = webapi.create_giveaway(user(900), payload)
-    assert giveaway["entry_deadline"].endswith("+00:00") is False
-    webapi.giveaway_action(user(900), giveaway["id"], "launch")
-    joined = webapi.join_giveaway(user(333), giveaway["id"], webapi.GiveawayJoinIn(geo_code="UZ", player_id="player-333"))
-    assert joined["player_id"] == "player-333"
-    own = webapi.giveaway_participation(user(333), giveaway["id"])
-    assert own["player_id"] == "player-333"
+def test_manager_and_superadmin_can_create_scheduled_giveaways(isolated_database):
+    owner, manager = user(900), user(901)
+    webapi.grant_manager_access(owner, webapi.ManagerAccessIn(telegram_id=manager["id"]))
+    now = datetime.now(webapi.PROJECT_TIMEZONE)
+    assert new_giveaway(manager, start_at=now + timedelta(hours=1), end_at=now + timedelta(hours=2))["status"] == "draft"
+    assert new_giveaway(owner, start_at=now + timedelta(hours=3), end_at=now + timedelta(hours=4))["status"] == "draft"

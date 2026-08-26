@@ -170,6 +170,10 @@ class Giveaway(Base):
     winner_count: Mapped[int] = mapped_column(Integer, default=1)
     entry_deadline: Mapped[datetime] = mapped_column(DateTime, index=True)
     draw_date: Mapped[datetime] = mapped_column(DateTime)
+    # New scheduled giveaways use these explicit start/end values. The legacy
+    # columns remain populated so existing rows and integrations keep working.
+    start_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     geo_codes: Mapped[str] = mapped_column(Text, default="[]")
     rules: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
@@ -248,6 +252,7 @@ def init_storage() -> None:
     # nullable additions keep legacy applications intact during deployment.
     existing = {column["name"] for column in inspect(engine).get_columns("agent_applications")}
     document_columns = {column["name"] for column in inspect(engine).get_columns("agent_documents")}
+    giveaway_columns = {column["name"] for column in inspect(engine).get_columns("giveaways")}
     additions = {
         "updated_at": "TIMESTAMP",
         "telegram_username": "VARCHAR(64)",
@@ -279,6 +284,9 @@ def init_storage() -> None:
         for name, sql_type in additions.items():
             if name not in existing:
                 connection.execute(text(f"ALTER TABLE agent_applications ADD COLUMN {name} {sql_type}"))
+        for name, sql_type in {"start_at": "TIMESTAMP", "end_at": "TIMESTAMP"}.items():
+            if name not in giveaway_columns:
+                connection.execute(text(f"ALTER TABLE giveaways ADD COLUMN {name} {sql_type}"))
         if "expires_at" not in document_columns:
             connection.execute(text("ALTER TABLE agent_documents ADD COLUMN expires_at TIMESTAMP"))
         if engine.dialect.name == "postgresql":
