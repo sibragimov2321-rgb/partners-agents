@@ -44,17 +44,18 @@ def new_giveaway(manager=None):
 
 
 def test_today_registration_deadline_is_allowed_when_its_time_is_still_ahead():
-    """19:45 today → 22:00 today is valid in the configured project timezone."""
-    project_now = datetime(2026, 8, 26, 19, 45, tzinfo=webapi.PROJECT_TIMEZONE)
-    deadline = webapi._giveaway_utc_naive(datetime(2026, 8, 26, 22, 0))
+    """A same-day deadline may be as close as one minute after the current time."""
+    project_now = datetime(2026, 8, 26, 19, 50, tzinfo=webapi.PROJECT_TIMEZONE)
     now_utc = project_now.astimezone(timezone.utc).replace(tzinfo=None)
 
-    assert webapi._giveaway_deadline_is_future(deadline, now=now_utc) is True
+    for local_time in ((20, 0), (20, 10), (19, 55)):
+        deadline = webapi._giveaway_utc_naive(datetime(2026, 8, 26, *local_time))
+        assert webapi._giveaway_deadline_is_future(deadline, now=now_utc) is True
 
 
 def test_today_registration_deadline_is_rejected_when_its_time_has_passed():
-    project_now = datetime(2026, 8, 26, 19, 45, tzinfo=webapi.PROJECT_TIMEZONE)
-    deadline = webapi._giveaway_utc_naive(datetime(2026, 8, 26, 19, 0))
+    project_now = datetime(2026, 8, 26, 19, 50, tzinfo=webapi.PROJECT_TIMEZONE)
+    deadline = webapi._giveaway_utc_naive(datetime(2026, 8, 26, 19, 49))
     now_utc = project_now.astimezone(timezone.utc).replace(tzinfo=None)
 
     assert webapi._giveaway_deadline_is_future(deadline, now=now_utc) is False
