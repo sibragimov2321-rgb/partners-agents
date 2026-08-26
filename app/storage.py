@@ -11,7 +11,17 @@ def database_url() -> str:
     return url.replace("postgresql://", "postgresql+psycopg://", 1)
 
 
-engine = create_engine(database_url(), pool_pre_ping=True)
+_DATABASE_URL = database_url()
+_ENGINE_OPTIONS = {"pool_pre_ping": True}
+# SQLite is used only for local tests. Railway/PostgreSQL benefits from a
+# bounded reusable pool instead of opening a connection for every request.
+if not _DATABASE_URL.startswith("sqlite"):
+    _ENGINE_OPTIONS.update({
+        "pool_size": int(os.getenv("DB_POOL_SIZE", "5")),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "5")),
+        "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "10")),
+    })
+engine = create_engine(_DATABASE_URL, **_ENGINE_OPTIONS)
 
 
 class Base(DeclarativeBase):
@@ -294,6 +304,12 @@ def init_storage() -> None:
             connection.execute(text("ALTER TABLE support_tickets ALTER COLUMN telegram_id TYPE BIGINT"))
         connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_agent_applications_agent_id ON agent_applications (agent_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_users_username ON telegram_users (username)"))
+        # Composite indexes match the most frequent manager and giveaway reads.
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_applications_status_updated ON agent_applications (status, updated_at)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_giveaway_participants_giveaway_status ON giveaway_participants (giveaway_id, status)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_giveaway_participants_giveaway_geo ON giveaway_participants (giveaway_id, geo_code)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_giveaway_winners_giveaway_status ON giveaway_winners (giveaway_id, status)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_giveaway_audit_giveaway_created ON giveaway_audit_logs (giveaway_id, created_at)"))
         connection.execute(text("DELETE FROM agent_documents WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP"))
 
     defaults = [

@@ -15,10 +15,11 @@ from aiogram.types import (
     Message,
     WebAppInfo,
 )
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from .storage import init_storage, save_telegram_user
+from .cashier_api import close_cashier_client
 from .webapi import (
     AccountStartIn,
     ApplicationDraftIn,
@@ -88,7 +89,7 @@ if not PUBLIC_APP_URL.startswith(("http://", "https://")):
 # Telegram Desktop and mobile clients can cache a Mini App by its exact URL.
 # Bump this non-secret build marker when frontend navigation changes so the
 # menu button always opens the current deployment instead of a cached shell.
-WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260826-6").strip()
+WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260827-1").strip()
 
 BASE = Path(__file__).resolve().parent.parent
 WEBHOOK_PATH = "/telegram/webhook"
@@ -122,59 +123,64 @@ async def startup() -> None:
     init_storage()
 
 
+@api.on_event("shutdown")
+async def shutdown() -> None:
+    await close_cashier_client()
+
+
 @api.get("/api/me")
-async def me(user: dict = Depends(current_user)):
+def me(user: dict = Depends(current_user)):
     return profile_payload(user)
 
 
 @api.post("/api/agent-applications")
-async def agent_application(payload: ApplicationIn, user: dict = Depends(current_user)):
+def agent_application(payload: ApplicationIn, user: dict = Depends(current_user)):
     return submit_application(user, payload)
 
 
 @api.post("/api/agent-onboarding/account")
-async def onboarding_account(payload: AccountStartIn, user: dict = Depends(current_user)):
+def onboarding_account(payload: AccountStartIn, user: dict = Depends(current_user)):
     return start_account(user, payload)
 
 
 @api.patch("/api/agent-onboarding/draft")
-async def onboarding_draft(payload: ApplicationDraftIn, user: dict = Depends(current_user)):
+def onboarding_draft(payload: ApplicationDraftIn, user: dict = Depends(current_user)):
     return save_application_draft(user, payload)
 
 
 @api.post("/api/agent-onboarding/deposit")
-async def onboarding_deposit(user: dict = Depends(current_user)):
+def onboarding_deposit(user: dict = Depends(current_user)):
     return mark_deposit(user)
 
 
 @api.post("/api/agent-onboarding/submit")
-async def onboarding_submit(payload: SubmitProfileIn, user: dict = Depends(current_user)):
+def onboarding_submit(payload: SubmitProfileIn, user: dict = Depends(current_user)):
     return submit_profile(user, payload.confirmed_truth)
 
 
 @api.get("/api/geo-settings")
-async def geo_settings(user: dict = Depends(current_user)):
+def geo_settings(user: dict = Depends(current_user)):
     return list_geo_settings(user)
 
 
 @api.get("/api/manager/geo-settings")
-async def manager_geo_settings(user: dict = Depends(current_user)):
+def manager_geo_settings(user: dict = Depends(current_user)):
     return list_geo_settings(user, include_inactive=True)
 
 
 @api.put("/api/superadmin/geo-settings/{geo_code}")
-async def put_geo_setting(geo_code: str, payload: GeoSettingIn, user: dict = Depends(current_user)):
+def put_geo_setting(geo_code: str, payload: GeoSettingIn, user: dict = Depends(current_user)):
     return update_geo_setting(user, geo_code, payload)
 
 
 @api.post("/api/agent-documents/{kind}")
 async def upload_agent_document(kind: str, document: UploadFile = File(...), user: dict = Depends(current_user)):
     data = await document.read(8 * 1024 * 1024 + 1)
-    return save_document(user, kind, document.filename or "document.jpg", document.content_type or "", data)
+    return await asyncio.to_thread(save_document, user, kind, document.filename or "document.jpg", document.content_type or "", data)
 
 
 @api.get("/api/agent-documents/{kind}")
-async def get_agent_document(kind: str, user: dict = Depends(current_user)):
+def get_agent_document(kind: str, user: dict = Depends(current_user)):
     data, mime_type, filename = load_document(user, kind)
     return Response(data, media_type=mime_type, headers={
         "Cache-Control": "no-store, private",
@@ -183,27 +189,27 @@ async def get_agent_document(kind: str, user: dict = Depends(current_user)):
 
 
 @api.delete("/api/agent-documents/{kind}")
-async def delete_agent_document(kind: str, user: dict = Depends(current_user)):
+def delete_agent_document(kind: str, user: dict = Depends(current_user)):
     return remove_document(user, kind)
 
 
 @api.get("/api/manager/applications")
-async def get_manager_applications(user: dict = Depends(current_user)):
+def get_manager_applications(user: dict = Depends(current_user)):
     return manager_applications(user)
 
 
 @api.post("/api/manager/applications/{application_id}/action")
-async def act_on_application(application_id: int, payload: ManagerActionIn, user: dict = Depends(current_user)):
+def act_on_application(application_id: int, payload: ManagerActionIn, user: dict = Depends(current_user)):
     return manager_application_action(user, application_id, payload)
 
 
 @api.delete("/api/manager/applications/{application_id}")
-async def delete_application(application_id: int, payload: DeleteApplicationIn, user: dict = Depends(current_user)):
+def delete_application(application_id: int, payload: DeleteApplicationIn, user: dict = Depends(current_user)):
     return delete_manager_application(user, application_id, payload)
 
 
 @api.get("/api/manager/applications/{application_id}/documents/{kind}")
-async def get_manager_document(application_id: int, kind: str, user: dict = Depends(current_user)):
+def get_manager_document(application_id: int, kind: str, user: dict = Depends(current_user)):
     data, mime_type, filename = load_document(user, kind, application_id)
     return Response(data, media_type=mime_type, headers={
         "Cache-Control": "no-store, private",
@@ -212,27 +218,27 @@ async def get_manager_document(application_id: int, kind: str, user: dict = Depe
 
 
 @api.get("/api/giveaways/active")
-async def get_active_giveaway(user: dict = Depends(current_user)):
+def get_active_giveaway(user: dict = Depends(current_user)):
     return active_giveaway(user)
 
 
 @api.get("/api/giveaways/{giveaway_id}/participation")
-async def get_giveaway_participation(giveaway_id: int, user: dict = Depends(current_user)):
+def get_giveaway_participation(giveaway_id: int, user: dict = Depends(current_user)):
     return giveaway_participation(user, giveaway_id)
 
 
 @api.post("/api/giveaways/{giveaway_id}/participation")
-async def create_giveaway_participation(giveaway_id: int, payload: GiveawayJoinIn, user: dict = Depends(current_user)):
+def create_giveaway_participation(giveaway_id: int, payload: GiveawayJoinIn, user: dict = Depends(current_user)):
     return join_giveaway(user, giveaway_id, payload)
 
 
 @api.get("/api/giveaways/{giveaway_id}/winners")
-async def get_giveaway_winners(giveaway_id: int, user: dict = Depends(current_user)):
+def get_giveaway_winners(giveaway_id: int, user: dict = Depends(current_user)):
     return public_winners(user, giveaway_id)
 
 
 @api.get("/api/giveaways/{giveaway_id}/banner")
-async def get_giveaway_banner(giveaway_id: int):
+def get_giveaway_banner(giveaway_id: int):
     data, mime_type, filename = load_giveaway_banner(giveaway_id)
     return Response(data, media_type=mime_type, headers={
         "Cache-Control": "public, max-age=3600",
@@ -241,38 +247,38 @@ async def get_giveaway_banner(giveaway_id: int):
 
 
 @api.get("/api/manager/giveaways")
-async def get_manager_giveaways(user: dict = Depends(current_user)):
+def get_manager_giveaways(user: dict = Depends(current_user)):
     return manager_giveaways(user)
 
 
 @api.post("/api/manager/giveaways")
-async def create_manager_giveaway(payload: GiveawayCreateIn, user: dict = Depends(current_user)):
+def create_manager_giveaway(payload: GiveawayCreateIn, user: dict = Depends(current_user)):
     return create_giveaway(user, payload)
 
 
 @api.get("/api/manager/giveaways/{giveaway_id}")
-async def get_manager_giveaway(giveaway_id: int, user: dict = Depends(current_user)):
+def get_manager_giveaway(giveaway_id: int, user: dict = Depends(current_user)):
     return manager_giveaway(user, giveaway_id)
 
 
 @api.patch("/api/manager/giveaways/{giveaway_id}")
-async def patch_manager_giveaway(giveaway_id: int, payload: GiveawayUpdateIn, user: dict = Depends(current_user)):
+def patch_manager_giveaway(giveaway_id: int, payload: GiveawayUpdateIn, user: dict = Depends(current_user)):
     return update_giveaway(user, giveaway_id, payload)
 
 
 @api.post("/api/manager/giveaways/{giveaway_id}/action")
-async def manager_giveaway_action(giveaway_id: int, payload: GiveawayLifecycleIn, user: dict = Depends(current_user)):
+def manager_giveaway_action(giveaway_id: int, payload: GiveawayLifecycleIn, user: dict = Depends(current_user)):
     return giveaway_action(user, giveaway_id, payload.action)
 
 
 @api.post("/api/manager/giveaways/{giveaway_id}/banner")
 async def upload_giveaway_banner(giveaway_id: int, banner: UploadFile = File(...), user: dict = Depends(current_user)):
     data = await banner.read(8 * 1024 * 1024 + 1)
-    return save_giveaway_banner(user, giveaway_id, banner.filename or "giveaway.jpg", banner.content_type or "", data)
+    return await asyncio.to_thread(save_giveaway_banner, user, giveaway_id, banner.filename or "giveaway.jpg", banner.content_type or "", data)
 
 
 @api.get("/api/manager/giveaways/{giveaway_id}/participants")
-async def get_giveaway_participants(
+def get_giveaway_participants(
     giveaway_id: int,
     status: str | None = Query(default=None, max_length=24),
     geo_code: str | None = Query(default=None, max_length=16),
@@ -283,27 +289,27 @@ async def get_giveaway_participants(
 
 
 @api.post("/api/manager/giveaways/{giveaway_id}/participants/{participant_id}/exclude")
-async def exclude_giveaway_participant(giveaway_id: int, participant_id: int, payload: GiveawayParticipantActionIn, user: dict = Depends(current_user)):
+def exclude_giveaway_participant(giveaway_id: int, participant_id: int, payload: GiveawayParticipantActionIn, user: dict = Depends(current_user)):
     return set_participant_excluded(user, giveaway_id, participant_id, payload)
 
 
 @api.post("/api/manager/giveaways/{giveaway_id}/participants/{participant_id}/restore")
-async def restore_giveaway_participant(giveaway_id: int, participant_id: int, user: dict = Depends(current_user)):
+def restore_giveaway_participant(giveaway_id: int, participant_id: int, user: dict = Depends(current_user)):
     return restore_participant(user, giveaway_id, participant_id)
 
 
 @api.post("/api/manager/giveaways/{giveaway_id}/draw")
-async def run_giveaway_draw(giveaway_id: int, user: dict = Depends(current_user)):
+def run_giveaway_draw(giveaway_id: int, user: dict = Depends(current_user)):
     return draw_giveaway(user, giveaway_id)
 
 
 @api.post("/api/manager/giveaways/{giveaway_id}/winners/{winner_id}/replace")
-async def replace_winner(giveaway_id: int, winner_id: int, payload: GiveawayParticipantActionIn, user: dict = Depends(current_user)):
+def replace_winner(giveaway_id: int, winner_id: int, payload: GiveawayParticipantActionIn, user: dict = Depends(current_user)):
     return replace_giveaway_winner(user, giveaway_id, winner_id, payload)
 
 
 @api.get("/api/manager/giveaways/{giveaway_id}/history")
-async def get_giveaway_history(giveaway_id: int, user: dict = Depends(current_user)):
+def get_giveaway_history(giveaway_id: int, user: dict = Depends(current_user)):
     return giveaway_history(user, giveaway_id)
 
 
@@ -338,49 +344,56 @@ async def send_giveaway_broadcast(broadcast: dict, giveaway_id: int) -> dict:
                 failed += 1
     finally:
         await bot.session.close()
-    complete_giveaway_broadcast(broadcast["broadcast_id"], sent, failed)
+    await asyncio.to_thread(complete_giveaway_broadcast, broadcast["broadcast_id"], sent, failed)
     return {"sent": sent, "failed": failed}
 
 
 @api.post("/api/manager/giveaways/{giveaway_id}/broadcast")
-async def broadcast_giveaway(giveaway_id: int, payload: GiveawayBroadcastIn, user: dict = Depends(current_user)):
-    broadcast = create_giveaway_broadcast(user, giveaway_id, payload)
-    result = await send_giveaway_broadcast(broadcast, giveaway_id)
-    return {"recipients": len(broadcast["recipients"]), **result}
+async def broadcast_giveaway(
+    giveaway_id: int,
+    payload: GiveawayBroadcastIn,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(current_user),
+):
+    # Sending can take minutes for a large audience. Queue it after the HTTP
+    # response so it cannot freeze the manager UI or other API requests.
+    broadcast = await asyncio.to_thread(create_giveaway_broadcast, user, giveaway_id, payload)
+    background_tasks.add_task(send_giveaway_broadcast, broadcast, giveaway_id)
+    return {"recipients": len(broadcast["recipients"]), "sent": 0, "failed": 0, "status": "queued"}
 
 
 @api.get("/api/superadmin/managers")
-async def get_managers(user: dict = Depends(current_user)):
+def get_managers(user: dict = Depends(current_user)):
     return list_manager_access(user)
 
 
 @api.post("/api/superadmin/managers")
-async def add_manager(payload: ManagerAccessIn, user: dict = Depends(current_user)):
+def add_manager(payload: ManagerAccessIn, user: dict = Depends(current_user)):
     return grant_manager_access(user, payload)
 
 
 @api.delete("/api/superadmin/managers/{telegram_id}")
-async def delete_manager(telegram_id: int, user: dict = Depends(current_user)):
+def delete_manager(telegram_id: int, user: dict = Depends(current_user)):
     return revoke_manager_access(user, telegram_id)
 
 
 @api.post("/api/support-tickets")
-async def support_ticket(payload: TicketIn, user: dict = Depends(current_user)):
+def support_ticket(payload: TicketIn, user: dict = Depends(current_user)):
     return submit_ticket(user, payload)
 
 
 @api.post("/api/check-contact")
-async def contact_check(payload: ContactCheckIn, user: dict = Depends(current_user)):
+def contact_check(payload: ContactCheckIn, user: dict = Depends(current_user)):
     return check_contact(payload)
 
 
 @api.post("/api/check-blocked")
-async def blocked_check(payload: ContactCheckIn, user: dict = Depends(current_user)):
+def blocked_check(payload: ContactCheckIn, user: dict = Depends(current_user)):
     return check_contact(payload, blocked_only=True)
 
 
 @api.post("/api/check-manager")
-async def manager_check(payload: ContactCheckIn, user: dict = Depends(current_user)):
+def manager_check(payload: ContactCheckIn, user: dict = Depends(current_user)):
     return check_manager(payload)
 
 

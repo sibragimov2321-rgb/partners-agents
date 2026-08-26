@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import Header, HTTPException
 from pydantic import BaseModel, EmailStr, Field, model_validator
-from sqlalchemy import delete, or_, select
+from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from .storage import (
@@ -579,16 +579,20 @@ def _participant_payload(
 
 
 def _giveaway_payload(giveaway: Giveaway, session: Session, manager: bool = False) -> dict:
-    participants = session.scalars(select(GiveawayParticipant).where(
-        GiveawayParticipant.giveaway_id == giveaway.id,
-    )).all()
+    participant_totals = session.execute(select(
+        func.count(GiveawayParticipant.id),
+        func.coalesce(func.sum(case((GiveawayParticipant.status == "active", 1), else_=0)), 0),
+        func.coalesce(func.sum(case((GiveawayParticipant.status == "excluded", 1), else_=0)), 0),
+    ).where(GiveawayParticipant.giveaway_id == giveaway.id)).one()
     winners = session.scalars(select(GiveawayWinner).where(
         GiveawayWinner.giveaway_id == giveaway.id,
         GiveawayWinner.status == "active",
     ).order_by(GiveawayWinner.rank.asc(), GiveawayWinner.id.asc())).all()
-    participant_by_id = {item.id: item for item in participants}
-    active_count = sum(item.status == "active" for item in participants)
-    excluded_count = sum(item.status == "excluded" for item in participants)
+    winner_participant_ids = [winner.participant_id for winner in winners]
+    winner_participants = session.scalars(select(GiveawayParticipant).where(
+        GiveawayParticipant.id.in_(winner_participant_ids),
+    )).all() if winner_participant_ids else []
+    participant_by_id = {item.id: item for item in winner_participants}
     winner_rows = []
     for winner in winners:
         participant = participant_by_id.get(winner.participant_id)
@@ -619,9 +623,9 @@ def _giveaway_payload(giveaway: Giveaway, session: Session, manager: bool = Fals
         "banner_url": f"/api/giveaways/{giveaway.id}/banner" if giveaway.banner_data else None,
         "created_at": giveaway.created_at.isoformat(),
         "updated_at": giveaway.updated_at.isoformat(),
-        "participants_count": len(participants),
-        "active_participants_count": active_count,
-        "excluded_participants_count": excluded_count,
+        "participants_count": int(participant_totals[0] or 0),
+        "active_participants_count": int(participant_totals[1] or 0),
+        "excluded_participants_count": int(participant_totals[2] or 0),
         "winners": winner_rows,
         **({"created_by": giveaway.created_by} if manager else {}),
     }
