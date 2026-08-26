@@ -83,6 +83,10 @@ TOKEN = os.environ["BOT_TOKEN"]
 PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "http://localhost:8000").strip().rstrip("/")
 if not PUBLIC_APP_URL.startswith(("http://", "https://")):
     PUBLIC_APP_URL = "https://" + PUBLIC_APP_URL
+# Telegram Desktop and mobile clients can cache a Mini App by its exact URL.
+# Bump this non-secret build marker when frontend navigation changes so the
+# menu button always opens the current deployment instead of a cached shell.
+WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260826-4").strip()
 
 BASE = Path(__file__).resolve().parent.parent
 WEBHOOK_PATH = "/telegram/webhook"
@@ -92,9 +96,18 @@ api.mount("/static", StaticFiles(directory=BASE / "web"), name="static")
 dp = Dispatcher()
 
 
+def webapp_url(giveaway_id: int | None = None) -> str:
+    """Return a versioned Mini App URL and preserve a future custom query."""
+    separator = "&" if "?" in PUBLIC_APP_URL else "?"
+    url = f"{PUBLIC_APP_URL}{separator}v={WEBAPP_BUILD}"
+    return f"{url}&giveaway={giveaway_id}" if giveaway_id is not None else url
+
+
 @api.get("/")
 async def index():
-    return FileResponse(BASE / "web" / "index.html")
+    return FileResponse(BASE / "web" / "index.html", headers={
+        "Cache-Control": "no-store, max-age=0",
+    })
 
 
 @api.get("/health")
@@ -299,7 +312,7 @@ async def send_giveaway_broadcast(broadcast: dict, giveaway_id: int) -> dict:
     markup = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(
             text=broadcast["button_text"],
-            web_app=WebAppInfo(url=f"{PUBLIC_APP_URL}?giveaway={giveaway_id}"),
+            web_app=WebAppInfo(url=webapp_url(giveaway_id)),
         )
     ]]) if broadcast.get("button_text") else None
     try:
@@ -374,7 +387,7 @@ def open_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[[
             InlineKeyboardButton(
                 text="Открыть",
-                web_app=WebAppInfo(url=PUBLIC_APP_URL),
+                web_app=WebAppInfo(url=webapp_url()),
             )
         ]]
     )
@@ -382,7 +395,7 @@ def open_keyboard() -> InlineKeyboardMarkup:
 
 async def configure_menu(bot: Bot, chat_id: int | None = None) -> None:
     """Set the Mini App button globally and for the current private chat."""
-    menu_button = MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=PUBLIC_APP_URL))
+    menu_button = MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=webapp_url()))
     await bot.set_chat_menu_button(menu_button=menu_button)
     if chat_id is not None:
         await bot.set_chat_menu_button(chat_id=chat_id, menu_button=menu_button)
