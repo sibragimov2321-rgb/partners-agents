@@ -1,4 +1,4 @@
-import { esc, icon, pageHead } from './ui.js?v=20260826-1';
+import { esc, icon, pageHead } from './ui.js?v=20260826-2';
 
 const e = value => esc(value ?? '');
 const button = (label, attrs = '', kind = 'primary') => `<button class="app-btn ${kind}" ${attrs}>${label}</button>`;
@@ -37,7 +37,7 @@ export function renderGiveawayWinners(giveaway) {
 }
 
 export function renderGiveawayManager(giveaways = [], geoSettings = []) {
-  const list = giveaways.length ? giveaways.map(item => `<button class="giveaway-manager-row" data-giveaway-open="${item.id}"><i>${icon('gift')}</i><span><small>${e(item.number)} · ${e(statusLabel(item.status))}</small><b>${e(item.title)}</b><em>${item.participants_count} участников · ${e(item.prize)}</em></span>${icon('arrow')}</button>`).join('') : '<section class="empty-state"><h2>Розыгрышей пока нет</h2><p>Создайте первый розыгрыш для участников программы.</p></section>';
+  const list = giveaways.length ? giveaways.map(item => `<button class="giveaway-manager-row" data-giveaway-open="${item.id}"><i>${icon('gift')}</i><span><small>${e(item.number)} · ${e(statusLabel(item.status))}</small><b>${e(item.title)}</b><em>${item.participants_count} участников · ${e(item.prize)}</em></span>${icon('arrow')}</button>`).join('') : '<section class="empty-state"><h2>Пока нет созданных розыгрышей.</h2><p>Создайте первый розыгрыш для участников программы.</p></section>';
   return `<div class="view giveaway-manager-view">${pageHead('🎁 Розыгрыши', `${giveaways.length} всего`)}${button('➕ Создать розыгрыш', 'data-nav="manager-giveaway-create"')}${list}</div>`;
 }
 

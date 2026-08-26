@@ -218,10 +218,17 @@ def application_payload(application: AgentApplication, session: Session) -> dict
 def profile_payload(user: dict) -> dict:
     with Session(engine) as session:
         application = session.scalar(select(AgentApplication).where(AgentApplication.telegram_id == int(user["id"])))
+        # The project uses boolean capability flags, not string role names.
+        # ADMIN_IDS and database managers are managers; the owner is also a
+        # superadmin. Keep a dedicated capability for the Giveaway UI so both
+        # frontend and backend use the same effective permission.
+        is_manager = is_manager_id(user["id"])
+        is_superadmin = is_superadmin_id(user["id"])
         return {
             "telegram": user,
-            "is_manager": is_manager_id(user["id"]),
-            "is_superadmin": is_superadmin_id(user["id"]),
+            "is_manager": is_manager or is_superadmin,
+            "is_superadmin": is_superadmin,
+            "can_manage_giveaways": is_manager or is_superadmin,
             "application": application_payload(application, session) if application else None,
         }
 

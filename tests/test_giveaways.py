@@ -103,6 +103,40 @@ def test_only_manager_can_control_giveaway_and_broadcast_targets(isolated_databa
     assert listed["participants"][0]["player_id"] == "partner-111"
 
 
+def test_user_manager_and_superadmin_giveaway_permissions(isolated_database):
+    owner = user(900)
+    manager = user(901)
+    regular_user = user(902)
+    webapi.grant_manager_access(owner, webapi.ManagerAccessIn(telegram_id=manager["id"]))
+
+    regular_profile = webapi.profile_payload(regular_user)
+    manager_profile = webapi.profile_payload(manager)
+    owner_profile = webapi.profile_payload(owner)
+    assert regular_profile["can_manage_giveaways"] is False
+    assert manager_profile["is_manager"] is True
+    assert manager_profile["can_manage_giveaways"] is True
+    assert owner_profile["is_superadmin"] is True
+    assert owner_profile["can_manage_giveaways"] is True
+
+    with pytest.raises(HTTPException) as denied:
+        webapi.create_giveaway(regular_user, webapi.GiveawayCreateIn(
+            title="No access", description="Regular user cannot create giveaways.", prize="Prize",
+            winner_count=1, entry_deadline=datetime.utcnow() + timedelta(days=1),
+            draw_date=datetime.utcnow() + timedelta(days=2), geo_codes=["UZ"], rules="Rules",
+        ))
+    assert denied.value.status_code == 403
+    assert webapi.create_giveaway(manager, webapi.GiveawayCreateIn(
+        title="Manager access", description="Manager can create a giveaway.", prize="Prize",
+        winner_count=1, entry_deadline=datetime.utcnow() + timedelta(days=1),
+        draw_date=datetime.utcnow() + timedelta(days=2), geo_codes=["UZ"], rules="Rules",
+    ))["status"] == "draft"
+    assert webapi.create_giveaway(owner, webapi.GiveawayCreateIn(
+        title="Owner access", description="Superadmin can create a giveaway.", prize="Prize",
+        winner_count=1, entry_deadline=datetime.utcnow() + timedelta(days=3),
+        draw_date=datetime.utcnow() + timedelta(days=4), geo_codes=["UZ"], rules="Rules",
+    ))["status"] == "draft"
+
+
 def test_only_one_giveaway_can_be_active_at_a_time(isolated_database):
     manager = user(900)
     first = new_giveaway(manager)

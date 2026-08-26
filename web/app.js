@@ -1,7 +1,8 @@
-import { esc, icon } from './ui.js?v=20260826-1';
-import * as screens from './screens.js?v=20260826-1';
+import { esc, icon } from './ui.js?v=20260826-2';
+import * as screens from './screens.js?v=20260826-2';
 import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-7';
-import { renderGiveaway, renderGiveawayCreate, renderGiveawayManager, renderGiveawayManagerDetail, renderGiveawayWinners, renderMyGiveaway } from './giveaways.js?v=20260826-1';
+import { renderGiveaway, renderGiveawayCreate, renderGiveawayManager, renderGiveawayManagerDetail, renderGiveawayWinners, renderMyGiveaway } from './giveaways.js?v=20260826-2';
+import { canManageGiveaways } from './giveaway-permissions.mjs?v=20260826-2';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const giveawayFromUrl=new URLSearchParams(window.location.search).get('giveaway');
 const supportsBack=Boolean(tg?.isVersionAtLeast?.('6.1'));
@@ -134,7 +135,7 @@ document.addEventListener('click',async e=>{
     flow.disabled=false;return;
   }
   const target=e.target.closest('[data-nav]');
-  if(target){if(target.dataset.nav==='apply'){state.forceApplication=false;state.justSubmitted=false;state.registrationStarted=false}if(target.dataset.nav==='manager'){const response=await api('/api/manager/applications');if(!response.ok)return note(await readError(response));state.managerApps=await response.json()}if(target.dataset.nav==='managers'){const [managersResponse,geoResponse]=await Promise.all([api('/api/superadmin/managers'),api('/api/manager/geo-settings')]);if(!managersResponse.ok)return note(await readError(managersResponse));if(!geoResponse.ok)return note(await readError(geoResponse));state.managers=await managersResponse.json();state.managerGeoSettings=await geoResponse.json()}if(target.dataset.nav==='giveaway'){state.giveawayStage='view';const active=await api('/api/giveaways/active');if(active.ok){state.giveaway=await active.json();if(state.giveaway){const participation=await api(`/api/giveaways/${state.giveaway.id}/participation`);state.giveawayParticipation=participation.ok?await participation.json():null}}}if(target.dataset.nav==='manager-giveaways'){const response=await api('/api/manager/giveaways');if(!response.ok)return note(await readError(response));state.managerGiveaways=await response.json()}return go(target.dataset.nav)}
+  if(target){if(target.dataset.nav==='apply'){state.forceApplication=false;state.justSubmitted=false;state.registrationStarted=false}if(target.dataset.nav==='manager'){const response=await api('/api/manager/applications');if(!response.ok)return note(await readError(response));state.managerApps=await response.json()}if(target.dataset.nav==='managers'){const [managersResponse,geoResponse]=await Promise.all([api('/api/superadmin/managers'),api('/api/manager/geo-settings')]);if(!managersResponse.ok)return note(await readError(managersResponse));if(!geoResponse.ok)return note(await readError(geoResponse));state.managers=await managersResponse.json();state.managerGeoSettings=await geoResponse.json()}if(target.dataset.nav==='giveaway'){state.giveawayStage='view';const active=await api('/api/giveaways/active');if(active.ok){state.giveaway=await active.json();if(state.giveaway){const participation=await api(`/api/giveaways/${state.giveaway.id}/participation`);state.giveawayParticipation=participation.ok?await participation.json():null}}}if(target.dataset.nav==='manager-giveaways'){if(!canManageGiveaways(state.account))return note('Доступ к управлению розыгрышами есть только у менеджера.');const response=await api('/api/manager/giveaways');if(!response.ok)return note(await readError(response));state.managerGiveaways=await response.json()}return go(target.dataset.nav)}
   const faq=e.target.closest('.faq-question');if(faq)faq.parentElement.classList.toggle('open');
 });
 
