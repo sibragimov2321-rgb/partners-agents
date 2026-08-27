@@ -84,6 +84,7 @@ from .webapi import (
 )
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 TOKEN = os.environ["BOT_TOKEN"]
 # Older Railway deployments used WEBAPP_URL.  Accept it as a safe fallback so
 # the already-configured bot button and webhook never fall back to localhost.
