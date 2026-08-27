@@ -415,12 +415,14 @@ class ManagerAgentCreateIn(BaseModel):
     phone: str = Field(min_length=5, max_length=64)
     email: EmailStr
     telegram_username: str | None = Field(default=None, max_length=64)
+    cashdesk_name: str = Field(min_length=2, max_length=160)
 
     @model_validator(mode="after")
     def normalize(self):
         self.name = self.name.strip()
         self.country = self.country.strip()
         self.phone = self.phone.strip()
+        self.cashdesk_name = self.cashdesk_name.strip()
         if not PHONE_RE.fullmatch(self.phone):
             raise ValueError("Проверьте формат телефона.")
         if self.telegram_username:
@@ -428,6 +430,10 @@ class ManagerAgentCreateIn(BaseModel):
             if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", self.telegram_username):
                 raise ValueError("Проверьте Telegram username.")
         return self
+
+
+class ManagerAgentUpdateIn(ManagerAgentCreateIn):
+    pass
 
 
 class GiveawayUpdateIn(BaseModel):
@@ -755,6 +761,7 @@ def create_manager_agent(user: dict, payload: ManagerAgentCreateIn) -> dict:
             email=str(payload.email),
             country=payload.country,
             phone=payload.phone,
+            cashdesk_name=payload.cashdesk_name,
             status="approved",
             submitted_at=datetime.utcnow(),
             approved_at=datetime.utcnow(),
@@ -772,6 +779,34 @@ def create_manager_agent(user: dict, payload: ManagerAgentCreateIn) -> dict:
             comment="Агент добавлен менеджером.",
         ))
         _audit(session, application.id, actor_id, "manager_created_agent")
+        session.commit()
+        session.refresh(application)
+        return application_payload(application, session)
+
+
+def update_manager_agent(user: dict, application_id: int, payload: ManagerAgentUpdateIn) -> dict:
+    manager_user(user)
+    with Session(engine) as session:
+        application = session.get(AgentApplication, application_id)
+        if not application or application.status != "approved":
+            raise HTTPException(404, "Подтверждённый агент не найден.")
+        if payload.telegram_id and payload.telegram_id != application.telegram_id:
+            duplicate = session.scalar(select(AgentApplication).where(
+                AgentApplication.telegram_id == payload.telegram_id,
+                AgentApplication.id != application.id,
+            ))
+            if duplicate:
+                raise HTTPException(409, "Этот Telegram ID уже связан с другим агентом.")
+        application.telegram_id = payload.telegram_id
+        application.telegram_username = payload.telegram_username
+        application.name = payload.name
+        application.first_name = payload.name.split(maxsplit=1)[0]
+        application.email = str(payload.email)
+        application.country = payload.country
+        application.phone = payload.phone
+        application.cashdesk_name = payload.cashdesk_name
+        application.updated_at = datetime.utcnow()
+        _audit(session, application.id, int(user["id"]), "manager_updated_agent")
         session.commit()
         session.refresh(application)
         return application_payload(application, session)
@@ -1618,7 +1653,7 @@ def check_contact(payload: ContactCheckIn, blocked_only: bool = False) -> dict:
         public_profile = None
         if verified:
             public_profile = {
-                "name": application.name,
+                "cashdesk_name": application.cashdesk_name or "Касса агента",
                 "agent_id": application.agent_id,
                 "country": application.country,
                 "city": application.city,

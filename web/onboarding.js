@@ -181,7 +181,8 @@ function managerButtons(application) {
   else if (application.status === 'waiting_documents') actions = common;
   else if (application.status === 'final_review') actions = `${application.documents_verified_at ? '<button name="action" value="activate">Активировать агента</button>' : '<button name="action" value="confirm_documents">Подтвердить документы</button>'}${common}`;
   else if (application.status === 'need_information') actions = '<button name="action" value="comment">Сохранить комментарий</button><button class="danger" name="action" value="reject">Отклонить</button>';
-  return `${actions}${remove}`;
+  const edit = application.status === 'approved' ? `<button type="button" data-edit-agent="${application.id}">✏️ Редактировать агента</button>` : '';
+  return `${actions}${edit}${remove}`;
 }
 
 export function renderManager(applications = [], filter = 'all') {
@@ -193,7 +194,19 @@ export function renderManager(applications = [], filter = 'all') {
 }
 
 export function renderManagerAddAgent() {
-  return `<div class="view manager-view">${pageHead('Добавить агента', 'Создание подтверждённого профиля')}<form class="flow-card" data-form="manager-add-agent"><p class="form-help">Telegram ID необязателен. Если он неизвестен, укажите username — профиль свяжется автоматически после первого входа агента в Mini App.</p><label class="field"><span>Telegram ID</span><input name="telegram_id" inputmode="numeric" pattern="[0-9]+" placeholder="123456789"></label><label class="field"><span>Username Telegram</span><input name="telegram_username" maxlength="32" placeholder="@username"></label><label class="field"><span>Имя и фамилия *</span><input name="name" required maxlength="160" placeholder="Имя Фамилия"></label><label class="field"><span>Страна *</span><input name="country" required maxlength="100" placeholder="Например: Tajikistan"></label><label class="field"><span>Телефон *</span><input name="phone" required type="tel" placeholder="+992 900 000 000"></label><label class="field"><span>Email *</span><input name="email" required type="email" placeholder="name@example.com"></label><div class="flow-actions">${action('Назад','type="button" data-nav="manager"','secondary')}${action('Добавить агента','type="submit"')}</div></form></div>`;
+  return managerAgentForm('manager-add-agent', {}, 'Добавить агента', 'Создание подтверждённого профиля');
+}
+
+export function renderManagerEditAgent(agent = {}) {
+  return managerAgentForm('manager-agent-edit', agent, 'Редактировать агента', agent.agent_id || 'Подтверждённый агент');
+}
+
+function managerAgentForm(formType, agent, title, subtitle) {
+  const value = field => e(agent[field] || '');
+  const telegramId = agent.telegram_id || '';
+  const button = formType === 'manager-add-agent' ? 'Добавить агента' : 'Сохранить изменения';
+  const attrs = formType === 'manager-agent-edit' ? ` data-agent-id="${e(agent.id)}"` : '';
+  return `<div class="view manager-view">${pageHead(title, subtitle)}<form class="flow-card" data-form="${formType}"${attrs}><p class="form-help">ФИО доступно только менеджерам. Обычным пользователям при проверке отображается только название кассы.</p><label class="field"><span>Telegram ID</span><input name="telegram_id" inputmode="numeric" pattern="[0-9]+" placeholder="123456789" value="${e(telegramId)}"></label><label class="field"><span>Username Telegram</span><input name="telegram_username" maxlength="32" placeholder="@username" value="${value('telegram_username')}"></label><label class="field"><span>Имя и фамилия *</span><input name="name" required maxlength="160" placeholder="Имя Фамилия" value="${value('name')}"></label><label class="field"><span>Название кассы *</span><input name="cashdesk_name" required maxlength="160" placeholder="Например: Central Cashdesk" value="${value('cashdesk_name')}"></label><label class="field"><span>Страна *</span><input name="country" required maxlength="100" placeholder="Например: Tajikistan" value="${value('country')}"></label><label class="field"><span>Телефон *</span><input name="phone" required type="tel" placeholder="+992 900 000 000" value="${value('phone')}"></label><label class="field"><span>Email *</span><input name="email" required type="email" placeholder="name@example.com" value="${value('email')}"></label><div class="flow-actions">${action('Назад','type="button" data-nav="manager"','secondary')}${action(button,'type="submit"')}</div></form></div>`;
 }
 
 export function renderManagerGeoSettings(geoSettings = []) {

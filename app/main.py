@@ -28,6 +28,7 @@ from .webapi import (
     DeleteApplicationIn,
     ManagerActionIn,
     ManagerAgentCreateIn,
+    ManagerAgentUpdateIn,
     ManagerAccessIn,
     GeoSettingIn,
     GiveawayBroadcastIn,
@@ -77,6 +78,7 @@ from .webapi import (
     update_giveaway,
     join_giveaway,
     create_manager_agent,
+    update_manager_agent,
     list_giveaway_participants,
     replace_giveaway_winner,
 )
@@ -91,7 +93,7 @@ if not PUBLIC_APP_URL.startswith(("http://", "https://")):
 # Telegram Desktop and mobile clients can cache a Mini App by its exact URL.
 # Bump this non-secret build marker when frontend navigation changes so the
 # menu button always opens the current deployment instead of a cached shell.
-WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260827-8").strip()
+WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260827-9").strip()
 
 BASE = Path(__file__).resolve().parent.parent
 WEBHOOK_PATH = "/telegram/webhook"
@@ -213,6 +215,11 @@ def act_on_application(application_id: int, payload: ManagerActionIn, user: dict
 @api.post("/api/manager/agents")
 def add_manager_agent(payload: ManagerAgentCreateIn, user: dict = Depends(current_user)):
     return create_manager_agent(user, payload)
+
+
+@api.put("/api/manager/agents/{application_id}")
+def edit_manager_agent(application_id: int, payload: ManagerAgentUpdateIn, user: dict = Depends(current_user)):
+    return update_manager_agent(user, application_id, payload)
 
 
 @api.delete("/api/manager/applications/{application_id}")

@@ -175,6 +175,8 @@ def test_complete_agent_flow_and_resume(isolated_database):
     assert verification["verified"] is True
     assert verification["agent"]["agent_id"] == application["agent_id"]
     assert verification["agent"]["country"] == "Кыргызстан"
+    assert verification["agent"]["cashdesk_name"] == "Agent Cash"
+    assert "name" not in verification["agent"]
     assert "email" not in verification["agent"]
     assert "phone" not in verification["agent"]
 
