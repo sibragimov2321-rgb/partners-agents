@@ -240,18 +240,21 @@ def test_geo_settings_are_database_driven(isolated_database):
     assert error.value.status_code == 403
 
 
-def test_only_owner_can_manage_manager_access(isolated_database):
+def test_manager_can_manage_manager_access(isolated_database):
     owner = user(900)
     new_manager = user(901)
     granted = webapi.grant_manager_access(owner, webapi.ManagerAccessIn(telegram_id=901))
     assert granted == {"telegram_id": 901, "username": None, "active": True}
     assert webapi.is_manager_id(901) is True
-    with pytest.raises(HTTPException) as error:
-        webapi.grant_manager_access(new_manager, webapi.ManagerAccessIn(telegram_id=902))
-    assert error.value.status_code == 403
-    managers = webapi.list_manager_access(owner)
+    granted_by_manager = webapi.grant_manager_access(new_manager, webapi.ManagerAccessIn(telegram_id=902))
+    assert granted_by_manager["telegram_id"] == 902
+    geo = webapi.update_geo_setting(new_manager, "KG", webapi.GeoSettingIn(
+        country="Кыргызстан", currency="USD", minimum_deposit=75, active=True,
+    ))
+    assert geo["minimum_deposit"] == 75
+    managers = webapi.list_manager_access(new_manager)
     assert any(item["telegram_id"] == 901 and item["active"] for item in managers)
-    revoked = webapi.revoke_manager_access(owner, 901)
+    revoked = webapi.revoke_manager_access(new_manager, 901)
     assert revoked == {"telegram_id": 901, "active": False}
     assert webapi.is_manager_id(901) is False
     with Session(isolated_database) as session:

@@ -1,6 +1,6 @@
 import { esc, icon } from './ui.js?v=20260827-5';
-import * as screens from './screens.js?v=20260827-6';
-import { renderManager, renderManagerAccess, renderManagerAddAgent, renderManagerEditAgent, renderManagerGeoSettings, renderOnboarding } from './onboarding.js?v=20260827-10';
+import * as screens from './screens.js?v=20260827-11';
+import { renderManager, renderManagerAccess, renderManagerAddAgent, renderManagerEditAgent, renderManagerGeoSettings, renderOnboarding } from './onboarding.js?v=20260827-11';
 import { renderGiveaway, renderGiveawayCreate, renderGiveawayManager, renderGiveawayManagerDetail, renderGiveawayWinners, renderMyGiveaway } from './giveaways.js?v=20260827-6';
 import { canManageGiveaways } from './giveaway-permissions.mjs?v=20260826-2';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();

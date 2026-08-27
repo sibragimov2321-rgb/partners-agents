@@ -1205,7 +1205,7 @@ def load_giveaway_banner(giveaway_id: int) -> tuple[bytes, str, str]:
 
 
 def list_manager_access(user: dict) -> list[dict]:
-    superadmin_user(user)
+    manager_user(user)
     configured = {int(value) for value in MANAGER_IDS | SUPERADMIN_IDS if value.isdigit()}
     with Session(engine) as session:
         stored = session.scalars(select(ManagerAccess).order_by(ManagerAccess.created_at.desc())).all()
@@ -1230,7 +1230,7 @@ def list_manager_access(user: dict) -> list[dict]:
 
 
 def grant_manager_access(user: dict, payload: ManagerAccessIn) -> dict:
-    superadmin_user(user)
+    manager_user(user)
     with Session(engine) as session:
         profile = None
         if payload.telegram_id:
@@ -1261,7 +1261,7 @@ def grant_manager_access(user: dict, payload: ManagerAccessIn) -> dict:
 
 
 def revoke_manager_access(user: dict, telegram_id: int) -> dict:
-    superadmin_user(user)
+    manager_user(user)
     target = int(telegram_id)
     if str(target) in SUPERADMIN_IDS or str(target) in MANAGER_IDS:
         raise HTTPException(409, "Доступ из Railway нельзя удалить внутри приложения.")
