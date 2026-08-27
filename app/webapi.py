@@ -675,13 +675,13 @@ async def validate_giveaway_player(payload: GiveawayJoinIn) -> dict:
     try:
         verification = await verify_player(payload.player_id)
     except CashierApiUnavailable as error:
-        raise HTTPException(503, "Не удалось проверить Player ID. Попробуйте ещё раз.") from error
+        raise HTTPException(503, "PLAYER_CHECK_FAILED") from error
     if not verification.exists:
-        raise HTTPException(422, "❌ Player ID не найден.")
+        raise HTTPException(422, "PLAYER_NOT_FOUND")
     if not currency_geo_mapping():
-        raise HTTPException(503, "Не настроено соответствие currencyId и GEO. Обратитесь к менеджеру.")
+        raise HTTPException(503, "CURRENCY_GEO_MAPPING_MISSING")
     if not currency_matches_geo(verification.currency_id, payload.geo_code):
-        raise HTTPException(422, "❌ Этот игровой аккаунт относится к другому региону.")
+        raise HTTPException(422, "GEO_MISMATCH")
     return {"verified": True}
 
 
@@ -691,23 +691,23 @@ def join_giveaway(user: dict, giveaway_id: int, payload: GiveawayJoinIn) -> dict
         giveaway = _get_giveaway(session, giveaway_id)
         _sync_giveaway_schedule(giveaway, now)
         if _giveaway_uses_schedule(giveaway) and now < _giveaway_start(giveaway):
-            raise HTTPException(409, "Розыгрыш ещё не начался.")
+            raise HTTPException(409, "GIVEAWAY_NOT_STARTED")
         if giveaway.status != "active" or _giveaway_end(giveaway) <= now:
-            raise HTTPException(409, "Регистрация в этом розыгрыше уже закрыта.")
+            raise HTTPException(409, "GIVEAWAY_CLOSED")
         if payload.geo_code not in _giveaway_geos(giveaway):
-            raise HTTPException(422, "Выбранный GEO не участвует в этом розыгрыше.")
+            raise HTTPException(422, "GEO_NOT_ALLOWED")
         existing = session.scalar(select(GiveawayParticipant).where(
             GiveawayParticipant.giveaway_id == giveaway.id,
             GiveawayParticipant.telegram_id == int(user["id"]),
         ))
         if existing:
-            raise HTTPException(409, "Вы уже участвуете в текущем розыгрыше.")
+            raise HTTPException(409, "ALREADY_JOINED")
         duplicate = session.scalar(select(GiveawayParticipant).where(
             GiveawayParticipant.giveaway_id == giveaway.id,
             GiveawayParticipant.player_id == payload.player_id,
         ))
         if duplicate:
-            raise HTTPException(409, "Этот Player ID уже участвует в текущем розыгрыше.")
+            raise HTTPException(409, "PLAYER_ALREADY_JOINED")
         participant = GiveawayParticipant(
             giveaway_id=giveaway.id,
             telegram_id=int(user["id"]),
