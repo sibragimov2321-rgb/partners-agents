@@ -31,7 +31,7 @@ class Base(DeclarativeBase):
 class TelegramUser(Base):
     __tablename__ = "telegram_users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True, nullable=True)
     username: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     first_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
@@ -301,6 +301,7 @@ def init_storage() -> None:
             connection.execute(text("ALTER TABLE agent_documents ADD COLUMN expires_at TIMESTAMP"))
         if engine.dialect.name == "postgresql":
             connection.execute(text("ALTER TABLE agent_applications ALTER COLUMN telegram_id TYPE BIGINT"))
+            connection.execute(text("ALTER TABLE agent_applications ALTER COLUMN telegram_id DROP NOT NULL"))
             connection.execute(text("ALTER TABLE support_tickets ALTER COLUMN telegram_id TYPE BIGINT"))
         connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_agent_applications_agent_id ON agent_applications (agent_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_telegram_users_username ON telegram_users (username)"))

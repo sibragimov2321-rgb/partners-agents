@@ -236,6 +236,19 @@ def application_payload(application: AgentApplication, session: Session) -> dict
 def profile_payload(user: dict) -> dict:
     with Session(engine) as session:
         application = session.scalar(select(AgentApplication).where(AgentApplication.telegram_id == int(user["id"])))
+        # A manager can create an agent before receiving the Telegram ID.
+        # If that record contains the same username, link it on the agent's
+        # first verified Mini App session instead of inventing a placeholder ID.
+        username = (user.get("username") or "").strip().lstrip("@")
+        if application is None and username:
+            application = session.scalar(select(AgentApplication).where(
+                AgentApplication.telegram_id.is_(None),
+                AgentApplication.telegram_username.ilike(username),
+            ))
+            if application is not None:
+                application.telegram_id = int(user["id"])
+                application.updated_at = datetime.utcnow()
+                session.commit()
         # The project uses boolean capability flags, not string role names.
         # ADMIN_IDS and database managers are managers; the owner is also a
         # superadmin. Keep a dedicated capability for the Giveaway UI so both
@@ -396,7 +409,7 @@ class GiveawayCreateIn(BaseModel):
 
 
 class ManagerAgentCreateIn(BaseModel):
-    telegram_id: int = Field(gt=0)
+    telegram_id: int | None = Field(default=None, gt=0)
     name: str = Field(min_length=2, max_length=160)
     country: str = Field(min_length=2, max_length=100)
     phone: str = Field(min_length=5, max_length=64)
@@ -728,12 +741,12 @@ def create_manager_agent(user: dict, payload: ManagerAgentCreateIn) -> dict:
     with Session(engine) as session:
         existing = session.scalar(select(AgentApplication).where(
             AgentApplication.telegram_id == payload.telegram_id,
-        ))
+        )) if payload.telegram_id else None
         if existing:
             raise HTTPException(409, "У этого Telegram ID уже есть заявка или профиль агента.")
         telegram_user_record = session.scalar(select(TelegramUser).where(
             TelegramUser.telegram_id == payload.telegram_id,
-        ))
+        )) if payload.telegram_id else None
         application = AgentApplication(
             telegram_id=payload.telegram_id,
             telegram_username=payload.telegram_username or (telegram_user_record.username if telegram_user_record else None),
