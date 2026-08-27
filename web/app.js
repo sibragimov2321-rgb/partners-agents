@@ -1,7 +1,7 @@
-import { esc, icon } from './ui.js?v=20260826-3';
-import * as screens from './screens.js?v=20260826-3';
+import { esc, icon } from './ui.js?v=20260827-5';
+import * as screens from './screens.js?v=20260827-5';
 import { renderManager, renderManagerAccess, renderOnboarding } from './onboarding.js?v=20260821-7';
-import { renderGiveaway, renderGiveawayCreate, renderGiveawayManager, renderGiveawayManagerDetail, renderGiveawayWinners, renderMyGiveaway } from './giveaways.js?v=20260827-1';
+import { renderGiveaway, renderGiveawayCreate, renderGiveawayManager, renderGiveawayManagerDetail, renderGiveawayWinners, renderMyGiveaway } from './giveaways.js?v=20260827-5';
 import { canManageGiveaways } from './giveaway-permissions.mjs?v=20260826-2';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const giveawayFromUrl=new URLSearchParams(window.location.search).get('giveaway');
