@@ -541,15 +541,44 @@ async def telegram_webhook(request: Request):
 
 
 async def bot_setup():
+    """Keep the Telegram webhook registered without blocking FastAPI.
+
+    Railway may start serving HTTP before Telegram becomes reachable.  The
+    previous one-shot setup made this failure hard to diagnose and discarded
+    queued /start updates on every deployment.  Retry setup safely and retain
+    updates so users can always receive the portal message after a restart.
+    """
+    webhook_url = f"{PUBLIC_APP_URL}{WEBHOOK_PATH}"
     bot = Bot(TOKEN)
-    await bot.set_my_commands([
-        BotCommand(command="start", description="Открыть Partners Agent"),
-        BotCommand(command="menu", description="Open app menu"),
-        BotCommand(command="help", description="How to use the app"),
-    ])
-    await configure_menu(bot)
-    await bot.set_webhook(f"{PUBLIC_APP_URL}{WEBHOOK_PATH}", drop_pending_updates=True)
-    await asyncio.Event().wait()
+    try:
+        while True:
+            try:
+                await bot.set_my_commands([
+                    BotCommand(command="start", description="Открыть Partners Agent"),
+                    BotCommand(command="menu", description="Open app menu"),
+                    BotCommand(command="help", description="How to use the app"),
+                ])
+                await configure_menu(bot)
+                await bot.set_webhook(
+                    webhook_url,
+                    allowed_updates=dp.resolve_used_update_types(),
+                    drop_pending_updates=False,
+                )
+                info = await bot.get_webhook_info()
+                logger.info(
+                    "Telegram webhook configured: url=%s pending=%s last_error=%s",
+                    info.url,
+                    info.pending_update_count,
+                    info.last_error_message or "none",
+                )
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Telegram webhook setup failed; retrying in 15 seconds")
+                await asyncio.sleep(15)
+    finally:
+        await bot.session.close()
 
 
 async def serve():
