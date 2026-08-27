@@ -482,7 +482,7 @@ def list_geo_settings(user: dict, include_inactive: bool = False) -> list[dict]:
 
 
 def update_geo_setting(user: dict, geo_code: str, payload: GeoSettingIn) -> dict:
-    superadmin_user(user)
+    manager_user(user)
     code = geo_code.strip().upper()
     if not re.fullmatch(r"[A-Z0-9_-]{2,16}", code):
         raise HTTPException(422, "Некорректный GEO-код.")

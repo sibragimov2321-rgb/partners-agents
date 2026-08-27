@@ -91,7 +91,7 @@ if not PUBLIC_APP_URL.startswith(("http://", "https://")):
 # Telegram Desktop and mobile clients can cache a Mini App by its exact URL.
 # Bump this non-secret build marker when frontend navigation changes so the
 # menu button always opens the current deployment instead of a cached shell.
-WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260827-6").strip()
+WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260827-7").strip()
 
 BASE = Path(__file__).resolve().parent.parent
 WEBHOOK_PATH = "/telegram/webhook"
@@ -172,6 +172,11 @@ def manager_geo_settings(user: dict = Depends(current_user)):
 
 @api.put("/api/superadmin/geo-settings/{geo_code}")
 def put_geo_setting(geo_code: str, payload: GeoSettingIn, user: dict = Depends(current_user)):
+    return update_geo_setting(user, geo_code, payload)
+
+
+@api.put("/api/manager/geo-settings/{geo_code}")
+def put_manager_geo_setting(geo_code: str, payload: GeoSettingIn, user: dict = Depends(current_user)):
     return update_geo_setting(user, geo_code, payload)
 
 
