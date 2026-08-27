@@ -15,13 +15,6 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.orm import Session
 
-from .cashier_api import (
-    CashierApiUnavailable,
-    cashier_is_configured,
-    currency_geo_mapping,
-    currency_matches_geo,
-    verify_player,
-)
 from .storage import (
     AgentApplication,
     AgentApplicationHistory,
@@ -402,6 +395,28 @@ class GiveawayCreateIn(BaseModel):
         return self
 
 
+class ManagerAgentCreateIn(BaseModel):
+    telegram_id: int = Field(gt=0)
+    name: str = Field(min_length=2, max_length=160)
+    country: str = Field(min_length=2, max_length=100)
+    phone: str = Field(min_length=5, max_length=64)
+    email: EmailStr
+    telegram_username: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.name = self.name.strip()
+        self.country = self.country.strip()
+        self.phone = self.phone.strip()
+        if not PHONE_RE.fullmatch(self.phone):
+            raise ValueError("Проверьте формат телефона.")
+        if self.telegram_username:
+            self.telegram_username = self.telegram_username.strip().lstrip("@")
+            if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", self.telegram_username):
+                raise ValueError("Проверьте Telegram username.")
+        return self
+
+
 class GiveawayUpdateIn(BaseModel):
     title: str | None = Field(default=None, max_length=180)
     description: str | None = Field(default=None, max_length=5000)
@@ -663,28 +678,6 @@ def giveaway_participation(user: dict, giveaway_id: int) -> dict | None:
         return _participant_payload(participant, owner=True) if participant else None
 
 
-async def validate_giveaway_player(payload: GiveawayJoinIn) -> dict:
-    """Validate a Player ID before saving a giveaway participation.
-
-    Existing giveaway registration remains available until the cashier
-    credentials are put in Railway. Once configured, every check is enforced
-    server-side again immediately before the participation is created.
-    """
-    if not cashier_is_configured():
-        return {"verified": False, "integration": "not_configured"}
-    try:
-        verification = await verify_player(payload.player_id)
-    except CashierApiUnavailable as error:
-        raise HTTPException(503, "PLAYER_CHECK_FAILED") from error
-    if not verification.exists:
-        raise HTTPException(422, "PLAYER_NOT_FOUND")
-    if not currency_geo_mapping():
-        raise HTTPException(503, "CURRENCY_GEO_MAPPING_MISSING")
-    if not currency_matches_geo(verification.currency_id, payload.geo_code):
-        raise HTTPException(422, "GEO_MISMATCH")
-    return {"verified": True}
-
-
 def join_giveaway(user: dict, giveaway_id: int, payload: GiveawayJoinIn) -> dict:
     now = datetime.utcnow()
     with Session(engine) as session:
@@ -726,6 +719,49 @@ def join_giveaway(user: dict, giveaway_id: int, payload: GiveawayJoinIn) -> dict
         session.commit()
         session.refresh(participant)
         return _participant_payload(participant, owner=True)
+
+
+def create_manager_agent(user: dict, payload: ManagerAgentCreateIn) -> dict:
+    """Create an approved agent only from the protected manager workspace."""
+    manager_user(user)
+    actor_id = int(user["id"])
+    with Session(engine) as session:
+        existing = session.scalar(select(AgentApplication).where(
+            AgentApplication.telegram_id == payload.telegram_id,
+        ))
+        if existing:
+            raise HTTPException(409, "У этого Telegram ID уже есть заявка или профиль агента.")
+        telegram_user_record = session.scalar(select(TelegramUser).where(
+            TelegramUser.telegram_id == payload.telegram_id,
+        ))
+        application = AgentApplication(
+            telegram_id=payload.telegram_id,
+            telegram_username=payload.telegram_username or (telegram_user_record.username if telegram_user_record else None),
+            name=payload.name,
+            first_name=payload.name.split(maxsplit=1)[0],
+            email=str(payload.email),
+            country=payload.country,
+            phone=payload.phone,
+            status="approved",
+            submitted_at=datetime.utcnow(),
+            approved_at=datetime.utcnow(),
+            activated_at=datetime.utcnow(),
+            assigned_manager_id=actor_id,
+        )
+        session.add(application)
+        session.flush()
+        application.agent_id = f"PA-{application.id:06d}"
+        session.add(AgentApplicationHistory(
+            application_id=application.id,
+            actor_telegram_id=actor_id,
+            previous_status=None,
+            new_status="approved",
+            comment="Агент добавлен менеджером.",
+        ))
+        _audit(session, application.id, actor_id, "manager_created_agent")
+        session.commit()
+        session.refresh(application)
+        return application_payload(application, session)
 
 
 def public_winners(user: dict, giveaway_id: int) -> list[dict]:

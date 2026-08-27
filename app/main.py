@@ -27,6 +27,7 @@ from .webapi import (
     ContactCheckIn,
     DeleteApplicationIn,
     ManagerActionIn,
+    ManagerAgentCreateIn,
     ManagerAccessIn,
     GeoSettingIn,
     GiveawayBroadcastIn,
@@ -75,7 +76,7 @@ from .webapi import (
     update_geo_setting,
     update_giveaway,
     join_giveaway,
-    validate_giveaway_player,
+    create_manager_agent,
     list_giveaway_participants,
     replace_giveaway_winner,
 )
@@ -90,7 +91,7 @@ if not PUBLIC_APP_URL.startswith(("http://", "https://")):
 # Telegram Desktop and mobile clients can cache a Mini App by its exact URL.
 # Bump this non-secret build marker when frontend navigation changes so the
 # menu button always opens the current deployment instead of a cached shell.
-WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260827-5").strip()
+WEBAPP_BUILD = os.getenv("WEBAPP_BUILD", "20260827-6").strip()
 
 BASE = Path(__file__).resolve().parent.parent
 WEBHOOK_PATH = "/telegram/webhook"
@@ -204,6 +205,11 @@ def act_on_application(application_id: int, payload: ManagerActionIn, user: dict
     return manager_application_action(user, application_id, payload)
 
 
+@api.post("/api/manager/agents")
+def add_manager_agent(payload: ManagerAgentCreateIn, user: dict = Depends(current_user)):
+    return create_manager_agent(user, payload)
+
+
 @api.delete("/api/manager/applications/{application_id}")
 def delete_application(application_id: int, payload: DeleteApplicationIn, user: dict = Depends(current_user)):
     return delete_manager_application(user, application_id, payload)
@@ -230,15 +236,7 @@ def get_giveaway_participation(giveaway_id: int, user: dict = Depends(current_us
 
 @api.post("/api/giveaways/{giveaway_id}/participation")
 async def create_giveaway_participation(giveaway_id: int, payload: GiveawayJoinIn, user: dict = Depends(current_user)):
-    await validate_giveaway_player(payload)
     return await asyncio.to_thread(join_giveaway, user, giveaway_id, payload)
-
-
-@api.post("/api/giveaways/{giveaway_id}/validate-player")
-async def validate_giveaway_participant(giveaway_id: int, payload: GiveawayJoinIn, user: dict = Depends(current_user)):
-    # Authentication is intentionally required even for a pre-check. The ID
-    # itself is not persisted or exposed by this endpoint.
-    return await validate_giveaway_player(payload)
 
 
 @api.get("/api/giveaways/{giveaway_id}/winners")
