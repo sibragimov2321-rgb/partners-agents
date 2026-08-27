@@ -439,7 +439,10 @@ async def configure_menu(bot: Bot, chat_id: int | None = None) -> None:
 async def send_portal(message: Message) -> None:
     if message.from_user:
         save_telegram_user(telegram_message_user(message))
-    await configure_menu(message.bot, message.chat.id)
+    # The persistent menu button is configured during application startup.
+    # Do not call Telegram's setChatMenuButton for every /start: a transient
+    # Telegram API timeout must never prevent the user from receiving the
+    # Mini App button and produce a failed webhook response.
     await message.answer(
         "\U0001F680 Добро пожаловать в Partners Agent!\n\n"
         "\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u043a\u043d\u043e\u043f\u043a\u0443 \u00ab\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435\u00bb \u043d\u0438\u0436\u0435.\n\n"
