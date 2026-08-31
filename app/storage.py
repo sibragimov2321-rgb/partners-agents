@@ -59,6 +59,9 @@ class AgentApplication(Base):
     resume_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
     city: Mapped[str | None] = mapped_column(String(120), nullable=True)
     cashdesk_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    # GEO of the cashdesk can differ from the agent's country of residence.
+    # It is visible only in protected manager workspaces.
+    cashdesk_geo: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     location: Mapped[str | None] = mapped_column(String(300), nullable=True)
     source: Mapped[str | None] = mapped_column(String(80), nullable=True)
     source_other: Mapped[str | None] = mapped_column(String(300), nullable=True)
@@ -271,6 +274,7 @@ def init_storage() -> None:
         "resume_state": "VARCHAR(32)",
         "city": "VARCHAR(120)",
         "cashdesk_name": "VARCHAR(160)",
+        "cashdesk_geo": "VARCHAR(32)",
         "location": "VARCHAR(300)",
         "source": "VARCHAR(80)",
         "source_other": "VARCHAR(300)",

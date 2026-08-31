@@ -199,6 +199,7 @@ def application_payload(application: AgentApplication, session: Session) -> dict
         "geo_code": application.geo_code,
         "city": application.city,
         "cashdesk_name": application.cashdesk_name,
+        "cashdesk_geo": application.cashdesk_geo,
         "location": application.location,
         "experience": application.experience,
         "has_experience": application.has_experience,
@@ -416,6 +417,7 @@ class ManagerAgentCreateIn(BaseModel):
     email: EmailStr
     telegram_username: str | None = Field(default=None, max_length=64)
     cashdesk_name: str = Field(min_length=2, max_length=160)
+    cashdesk_geo: str | None = Field(default=None, max_length=32)
 
     @model_validator(mode="after")
     def normalize(self):
@@ -423,6 +425,8 @@ class ManagerAgentCreateIn(BaseModel):
         self.country = self.country.strip()
         self.phone = self.phone.strip()
         self.cashdesk_name = self.cashdesk_name.strip()
+        if self.cashdesk_geo:
+            self.cashdesk_geo = self.cashdesk_geo.strip().upper()
         if not PHONE_RE.fullmatch(self.phone):
             raise ValueError("Проверьте формат телефона.")
         if self.telegram_username:
@@ -762,6 +766,7 @@ def create_manager_agent(user: dict, payload: ManagerAgentCreateIn) -> dict:
             country=payload.country,
             phone=payload.phone,
             cashdesk_name=payload.cashdesk_name,
+            cashdesk_geo=payload.cashdesk_geo,
             status="approved",
             submitted_at=datetime.utcnow(),
             approved_at=datetime.utcnow(),
@@ -805,6 +810,7 @@ def update_manager_agent(user: dict, application_id: int, payload: ManagerAgentU
         application.country = payload.country
         application.phone = payload.phone
         application.cashdesk_name = payload.cashdesk_name
+        application.cashdesk_geo = payload.cashdesk_geo
         application.updated_at = datetime.utcnow()
         _audit(session, application.id, int(user["id"]), "manager_updated_agent")
         session.commit()
