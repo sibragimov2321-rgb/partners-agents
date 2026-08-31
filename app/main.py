@@ -534,6 +534,20 @@ async def help_command(message: Message):
     )
 
 
+@dp.message()
+async def start_fallback(message: Message):
+    """Handle a plain /start that arrives without a Telegram command entity.
+
+    Some Telegram clients resend the visible command as plain text after a
+    deployment or a restored chat. ``CommandStart`` intentionally ignores
+    that shape, so keep this narrow fallback after all regular command
+    handlers. It never reacts to ordinary user messages.
+    """
+    command = (message.text or "").strip().split(maxsplit=1)[0].lower()
+    if command == "/start" or command.startswith("/start@"):
+        await send_portal(message)
+
+
 @api.post(WEBHOOK_PATH)
 async def telegram_webhook(request: Request):
     bot = Bot(TOKEN)
