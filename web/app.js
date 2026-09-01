@@ -1,7 +1,7 @@
 import { esc, icon } from './ui.js?v=20260827-5';
-import * as screens from './screens.js?v=20260827-11';
+import * as screens from './screens.js?v=20260901-01';
 import { renderManager, renderManagerAccess, renderManagerAddAgent, renderManagerEditAgent, renderManagerGeoSettings, renderOnboarding } from './onboarding.js?v=20260831-03';
-import { renderGiveaway, renderGiveawayCreate, renderGiveawayManager, renderGiveawayManagerDetail, renderGiveawayWinners, renderMyGiveaway } from './giveaways.js?v=20260827-6';
+import { renderGiveaway, renderGiveawayCreate, renderGiveawayManager, renderGiveawayManagerDetail, renderGiveawayWinners, renderMyGiveaway } from './giveaways.js?v=20260901-01';
 import { canManageGiveaways } from './giveaway-permissions.mjs?v=20260826-2';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const giveawayFromUrl=new URLSearchParams(window.location.search).get('giveaway');
@@ -72,7 +72,7 @@ document.addEventListener('click',async e=>{
   if(confirmGiveawayJoin){
     confirmGiveawayJoin.disabled=true;const response=await api(`/api/giveaways/${state.giveaway.id}/participation`,{method:'POST',body:JSON.stringify(state.giveawayDraft)});
     if(!response.ok){confirmGiveawayJoin.disabled=false;return note(await readError(response))}
-    state.giveawayParticipation=await response.json();state.giveawayStage='view';note('🎉 Вы успешно зарегистрированы!');return go('giveaway_mine');
+    state.giveawayParticipation=await response.json();state.giveawayStage='view';note(screens.t(state.lang,'giveaway.success.joined'));return go('giveaway_mine');
   }
   const openGiveaway=e.target.closest('[data-giveaway-open]');
   if(openGiveaway){
@@ -81,15 +81,15 @@ document.addEventListener('click',async e=>{
   }
   const managerGiveawayAction=e.target.closest('[data-giveaway-manager-action]');
   if(managerGiveawayAction){
-    const action=managerGiveawayAction.dataset.giveawayManagerAction;const labels={launch:'Запустить этот розыгрыш?',close:'Закрыть регистрацию?',cancel:'Отменить розыгрыш?'};
+    const action=managerGiveawayAction.dataset.giveawayManagerAction;const labels={launch:screens.t(state.lang,'giveaway.confirm.launch'),close:screens.t(state.lang,'giveaway.confirm.close'),cancel:screens.t(state.lang,'giveaway.confirm.cancel')};
     if(!await confirmAction(labels[action]||'Подтвердить действие?'))return;managerGiveawayAction.disabled=true;
     const response=await api(`/api/manager/giveaways/${managerGiveawayAction.dataset.giveawayId}/action`,{method:'POST',body:JSON.stringify({action})});
-    if(!response.ok){managerGiveawayAction.disabled=false;return note(await readError(response))}state.managerGiveaway=await response.json();const list=await api('/api/manager/giveaways');if(list.ok)state.managerGiveaways=await list.json();note('Статус розыгрыша обновлён');return render();
+    if(!response.ok){managerGiveawayAction.disabled=false;return note(await readError(response))}state.managerGiveaway=await response.json();const list=await api('/api/manager/giveaways');if(list.ok)state.managerGiveaways=await list.json();note(screens.t(state.lang,'giveaway.success.updated'));return render();
   }
   const drawGiveaway=e.target.closest('[data-giveaway-draw]');
   if(drawGiveaway){
-    if(!await confirmAction(`Выбрать ${state.managerGiveaway?.winner_count||0} победителей случайным образом? Действие нельзя отменить без перевыбора.`))return;drawGiveaway.disabled=true;
-    const response=await api(`/api/manager/giveaways/${drawGiveaway.dataset.giveawayDraw}/draw`,{method:'POST'});if(!response.ok){drawGiveaway.disabled=false;return note(await readError(response))}state.managerGiveaway=await response.json();const list=await api('/api/manager/giveaways');if(list.ok)state.managerGiveaways=await list.json();note('🏆 Победители выбраны');return render();
+    if(!await confirmAction(screens.t(state.lang,'giveaway.confirm.draw',{count:state.managerGiveaway?.winner_count||0})))return;drawGiveaway.disabled=true;
+    const response=await api(`/api/manager/giveaways/${drawGiveaway.dataset.giveawayDraw}/draw`,{method:'POST'});if(!response.ok){drawGiveaway.disabled=false;return note(await readError(response))}state.managerGiveaway=await response.json();const list=await api('/api/manager/giveaways');if(list.ok)state.managerGiveaways=await list.json();note(screens.t(state.lang,'giveaway.success.drawn'));return render();
   }
   const excludeParticipant=e.target.closest('[data-giveaway-exclude]');
   if(excludeParticipant){const reason=window.prompt('Причина исключения участника:');if(!reason?.trim())return;excludeParticipant.disabled=true;const response=await api(`/api/manager/giveaways/${state.managerGiveaway.id}/participants/${excludeParticipant.dataset.giveawayExclude}/exclude`,{method:'POST',body:JSON.stringify({reason})});if(!response.ok){excludeParticipant.disabled=false;return note(await readError(response))}const list=await api(`/api/manager/giveaways/${state.managerGiveaway.id}/participants`);state.managerParticipants=list.ok?await list.json():state.managerParticipants;note('Участник исключён');return render()}
