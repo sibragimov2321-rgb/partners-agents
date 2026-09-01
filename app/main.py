@@ -438,7 +438,13 @@ async def configure_menu(bot: Bot, chat_id: int | None = None) -> None:
 
 async def send_portal(message: Message) -> None:
     if message.from_user:
-        save_telegram_user(telegram_message_user(message))
+        try:
+            # Database persistence must never delay or prevent the Telegram
+            # response. A duplicate update is harmless and is retried by the
+            # storage layer as an update.
+            await asyncio.to_thread(save_telegram_user, telegram_message_user(message))
+        except Exception:
+            logger.exception("Could not refresh Telegram user during /start")
     # The persistent menu button is configured during application startup.
     # Do not call Telegram's setChatMenuButton for every /start: a transient
     # Telegram API timeout must never prevent the user from receiving the

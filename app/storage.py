@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, create_engine, inspect, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 
@@ -388,7 +389,24 @@ def save_telegram_user(user: dict) -> TelegramUser:
         if "photo_url" in user:
             stored.photo_url = user.get("photo_url")
         stored.last_seen_at = datetime.utcnow()
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            # A webhook and a Mini App request can save the same Telegram
+            # user concurrently. The unique Telegram ID is correct; retry as
+            # an update instead of letting that harmless race break /start.
+            session.rollback()
+            stored = session.scalar(select(TelegramUser).where(TelegramUser.telegram_id == telegram_id))
+            if stored is None:
+                raise
+            stored.username = username
+            stored.first_name = user.get("first_name")
+            stored.last_name = user.get("last_name")
+            stored.language_code = user.get("language_code")
+            if "photo_url" in user:
+                stored.photo_url = user.get("photo_url")
+            stored.last_seen_at = datetime.utcnow()
+            session.commit()
         session.refresh(stored)
         session.expunge(stored)
         return stored
